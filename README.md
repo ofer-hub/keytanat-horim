@@ -1,32 +1,97 @@
-# React + TypeScript + Vite
+# קייטנת הורים אריאל
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+אפליקציית ניהול פעילויות לחופש הגדול תשפ״ו — יולי–אוגוסט 2026.  
+מיועדת לכ-13 ילדי כיתה ז׳ בעיר אריאל ומשפחותיהם.
 
-Currently, two official plugins are available:
+## הפעלה מקומית
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+האפליקציה תעבוד גם ללא Firebase — תשמור נתונים ב-`localStorage` (מצב demo).
+
+## חיבור Firebase (לשיתוף אמיתי בין מכשירים)
+
+### 1. צור פרויקט Firebase
+
+- פתח את [Firebase Console](https://console.firebase.google.com)
+- צור פרויקט חדש (Spark Plan = חינמי לגמרי)
+
+### 2. הפעל שירותים
+
+ב-Firebase Console:
+- **Authentication** → Sign-in method → **Anonymous** → Enable
+- **Firestore Database** → Create database → Start in **production mode**
+
+### 3. הגדר Firestore Rules
+
+ב-Firestore → Rules, הכנס את תוכן `firestore.rules` מהפרויקט.
+
+> ⚠️ **אל תשתמש ב-`allow read, write: if true`!**  
+> הקובץ `firestore.rules` בפרויקט כולל rules מאובטחות.
+
+### 4. צור קובץ .env.local
+
+```bash
+cp .env.local.example .env.local
+```
+
+מלא את הערכים מ-Firebase Console → Project Settings → Your apps → Web app:
+
+```env
+VITE_FIREBASE_API_KEY=...
+VITE_FIREBASE_AUTH_DOMAIN=...
+VITE_FIREBASE_PROJECT_ID=...
+VITE_FIREBASE_STORAGE_BUCKET=...
+VITE_FIREBASE_MESSAGING_SENDER_ID=...
+VITE_FIREBASE_APP_ID=...
+
+# שנה לקוד שתרצה — שתף רק עם הורים
+VITE_PARENT_CODE=horim2026
+```
+
+> ⚠️ **לעולם אל תכניס `.env.local` ל-Git!** הוא ב-`.gitignore`.
+
+## פריסה ב-Vercel
+
+1. Push לגיטהאב
+2. חבר Vercel לרפו
+3. הוסף את כל משתני ה-`VITE_*` ב-Vercel Dashboard → Settings → Environment Variables
+4. פרוס
+
+## משתני סביבה נדרשים
+
+| שם | תיאור |
+|----|--------|
+| `VITE_FIREBASE_API_KEY` | Firebase API Key |
+| `VITE_FIREBASE_AUTH_DOMAIN` | Firebase Auth Domain |
+| `VITE_FIREBASE_PROJECT_ID` | Firebase Project ID |
+| `VITE_FIREBASE_STORAGE_BUCKET` | Firebase Storage Bucket |
+| `VITE_FIREBASE_MESSAGING_SENDER_ID` | Firebase Messaging Sender ID |
+| `VITE_FIREBASE_APP_ID` | Firebase App ID |
+| `VITE_PARENT_CODE` | קוד סודי לרישום הורים (לא API) |
+
+## ארכיטקטורה
+
+- **React 19 + TypeScript + Vite**
+- **FullCalendar v6** — לוח עם RTL עברי
+- **@hebcal/core** — תאריכים עבריים
+- **Firebase** — Anonymous Auth + Firestore Realtime
+- **Tailwind CSS v3**
+- **PWA** — manifest + אייקון + meta tags
+
+## אבטחה
+
+- Firebase Anonymous Auth מגן על כל הנתונים
+- Firestore Rules מגבילים פעולות לפי תפקיד (הורה/ילד)
+- קוד הורים (`VITE_PARENT_CODE`) הוא מחסום UX — **לא** סוד ברמת Firebase
+- לא נשמרים secrets ב-Git
+- אין API בתשלום בשום מקום
+
+## מגבלות ידועות
+
+- UID של Anonymous Auth אינו יציב אם המשתמש מנקה את הדפדפן (פתרון: הרשמה מחדש)
+- Bundle גדול (~1.1MB) — FullCalendar + Firebase; לא חוסם פונקציונליות
+- Push notifications לא ממומשות — תזכורות הן ידניות

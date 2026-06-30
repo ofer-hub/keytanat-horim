@@ -1,51 +1,16 @@
 import {
-  collection,
-  doc,
-  getDocs,
-  getDoc,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  query,
-  where,
-  serverTimestamp,
-  Timestamp,
+  collection, doc, getDocs, getDoc, addDoc, setDoc, updateDoc, deleteDoc,
+  query, where, onSnapshot, serverTimestamp, Timestamp,
+  type Unsubscribe,
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from './config';
-import type { Parent, Child, Activity, ActivityEscort, ActivityRegistration } from '../types';
+import type { Parent, Child, AppUser, Activity, ActivityEscort, ActivityRegistration, PhoneIndex } from '../types';
 
-// --- LocalStorage fallback store ---
-type Store = {
-  parents: Parent[];
-  children: Child[];
-  activities: Activity[];
-  escorts: ActivityEscort[];
-  registrations: ActivityRegistration[];
-};
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function getStore(): Store {
-  try {
-    const raw = localStorage.getItem('keytanat_store');
-    if (raw) return JSON.parse(raw);
-  } catch {
-    // ignore
-  }
-  return { parents: [], children: [], activities: [], escorts: [], registrations: [] };
-}
+function nowISO(): string { return new Date().toISOString(); }
+function newId(): string { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
 
-function saveStore(s: Store): void {
-  localStorage.setItem('keytanat_store', JSON.stringify(s));
-}
-
-function newId(): string {
-  return Math.random().toString(36).slice(2) + Date.now().toString(36);
-}
-
-function nowISO(): string {
-  return new Date().toISOString();
-}
-
-// Convert Firebase Timestamp or string to ISO string
 function toISO(val: unknown): string {
   if (!val) return nowISO();
   if (val instanceof Timestamp) return val.toDate().toISOString();
@@ -53,103 +18,134 @@ function toISO(val: unknown): string {
   return nowISO();
 }
 
-// ============ PARENTS ============
+// ─── LocalStorage Store ───────────────────────────────────────────────────────
 
-export async function getParentByPhone(phone: string): Promise<Parent | null> {
-  if (isFirebaseConfigured) {
-    const q = query(collection(db, 'parents'), where('phone', '==', phone));
-    const snap = await getDocs(q);
-    if (snap.empty) return null;
-    const d = snap.docs[0];
-    return { id: d.id, ...d.data(), createdAt: toISO(d.data().createdAt) } as Parent;
-  }
-  const store = getStore();
-  return store.parents.find((p) => p.phone === phone) ?? null;
+interface Store {
+  users: (Parent | Child)[];
+  phoneIndex: Record<string, { uid: string; accessCode: string; role: string }>;
+  activities: Activity[];
+  escorts: ActivityEscort[];
+  registrations: ActivityRegistration[];
 }
 
-export async function createParent(data: Omit<Parent, 'id' | 'createdAt'>): Promise<Parent> {
-  const now = nowISO();
-  if (isFirebaseConfigured) {
-    const ref = await addDoc(collection(db, 'parents'), { ...data, createdAt: serverTimestamp() });
-    return { id: ref.id, ...data, createdAt: now };
-  }
-  const store = getStore();
-  const parent: Parent = { id: newId(), ...data, createdAt: now };
-  store.parents.push(parent);
-  saveStore(store);
-  return parent;
+function getStore(): Store {
+  try {
+    const raw = localStorage.getItem('keytanat_store_v2');
+    if (raw) return JSON.parse(raw);
+  } catch { /* ignore */ }
+  return { users: [], phoneIndex: {}, activities: [], escorts: [], registrations: [] };
 }
 
-export async function getParentById(id: string): Promise<Parent | null> {
+function saveStore(s: Store): void {
+  localStorage.setItem('keytanat_store_v2', JSON.stringify(s));
+}
+
+// ─── USER PROFILES (users/{uid}) ─────────────────────────────────────────────
+
+export async function getUserByUid(uid: string): Promise<AppUser | null> {
   if (isFirebaseConfigured) {
-    const snap = await getDoc(doc(db, 'parents', id));
+    const snap = await getDoc(doc(db, 'users', uid));
     if (!snap.exists()) return null;
-    return { id: snap.id, ...snap.data(), createdAt: toISO(snap.data().createdAt) } as Parent;
+    const d = snap.data();
+    return { id: uid, uid, ...d, createdAt: toISO(d.createdAt) } as AppUser;
   }
   const store = getStore();
-  return store.parents.find((p) => p.id === id) ?? null;
+  return store.users.find((u) => u.id === uid) ?? null;
 }
 
-export async function getAllParents(): Promise<Parent[]> {
+/** Look up user by phone number (for cross-device login) */
+export async function getPhoneIndex(phone: string): Promise<PhoneIndex | null> {
   if (isFirebaseConfigured) {
-    const snap = await getDocs(collection(db, 'parents'));
-    return snap.docs.map((d) => ({ id: d.id, ...d.data(), createdAt: toISO(d.data().createdAt) } as Parent));
-  }
-  return getStore().parents;
-}
-
-// ============ CHILDREN ============
-
-export async function getChildByPhone(phone: string): Promise<Child | null> {
-  if (isFirebaseConfigured) {
-    const q = query(collection(db, 'children'), where('phone', '==', phone));
-    const snap = await getDocs(q);
-    if (snap.empty) return null;
-    const d = snap.docs[0];
-    return { id: d.id, ...d.data(), createdAt: toISO(d.data().createdAt) } as Child;
+    const snap = await getDoc(doc(db, 'phoneIndex', phone));
+    if (!snap.exists()) return null;
+    return snap.data() as PhoneIndex;
   }
   const store = getStore();
-  return store.children.find((c) => c.phone === phone) ?? null;
+  const entry = store.phoneIndex[phone];
+  if (!entry) return null;
+  return entry as PhoneIndex;
 }
 
-export async function createChild(data: Omit<Child, 'id' | 'createdAt'>): Promise<Child> {
+export async function createUserProfile(
+  uid: string,
+  data: Omit<AppUser, 'id' | 'uid' | 'createdAt'>
+): Promise<AppUser> {
   const now = nowISO();
   if (isFirebaseConfigured) {
-    const ref = await addDoc(collection(db, 'children'), { ...data, createdAt: serverTimestamp() });
-    return { id: ref.id, ...data, createdAt: now };
+    await setDoc(doc(db, 'users', uid), { ...data, uid, createdAt: serverTimestamp() });
+    await setDoc(doc(db, 'phoneIndex', data.phone), {
+      uid,
+      accessCode: data.accessCode,
+      role: data.role,
+    });
+    return { id: uid, uid, ...data, createdAt: now } as AppUser;
   }
   const store = getStore();
-  const child: Child = { id: newId(), ...data, createdAt: now };
-  store.children.push(child);
+  const user = { id: uid, uid, ...data, createdAt: now } as AppUser;
+  store.users = store.users.filter((u) => u.id !== uid);
+  store.users.push(user);
+  store.phoneIndex[data.phone] = { uid, accessCode: data.accessCode, role: data.role };
   saveStore(store);
-  return child;
+  return user;
+}
+
+/** Update uid for existing phone (cross-device: user logs in on new device) */
+export async function migratePhoneToUid(phone: string, newUid: string, existingData: AppUser): Promise<void> {
+  if (isFirebaseConfigured) {
+    await setDoc(doc(db, 'users', newUid), { ...existingData, uid: newUid, updatedAt: serverTimestamp() });
+    await setDoc(doc(db, 'phoneIndex', phone), { uid: newUid, accessCode: existingData.accessCode, role: existingData.role });
+    return;
+  }
+  const store = getStore();
+  store.users = store.users.filter((u) => u.id !== existingData.id);
+  store.users.push({ ...existingData, id: newUid, uid: newUid });
+  store.phoneIndex[phone] = { uid: newUid, accessCode: existingData.accessCode, role: existingData.role };
+  saveStore(store);
+}
+
+export async function getAllUsers(): Promise<AppUser[]> {
+  if (isFirebaseConfigured) {
+    const snap = await getDocs(collection(db, 'users'));
+    return snap.docs.map((d) => ({ id: d.id, uid: d.id, ...d.data(), createdAt: toISO(d.data().createdAt) } as AppUser));
+  }
+  return getStore().users;
+}
+
+export async function getUsersByRole(role: 'parent' | 'child'): Promise<AppUser[]> {
+  if (isFirebaseConfigured) {
+    const q = query(collection(db, 'users'), where('role', '==', role));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, uid: d.id, ...d.data(), createdAt: toISO(d.data().createdAt) } as AppUser));
+  }
+  return getStore().users.filter((u) => u.role === role);
 }
 
 export async function getChildrenByParent(parentId: string): Promise<Child[]> {
   if (isFirebaseConfigured) {
-    const q = query(collection(db, 'children'), where('createdByParentId', '==', parentId));
+    const q = query(collection(db, 'users'), where('role', '==', 'child'), where('createdByParentId', '==', parentId));
     const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data(), createdAt: toISO(d.data().createdAt) } as Child));
+    return snap.docs.map((d) => ({ id: d.id, uid: d.id, ...d.data(), createdAt: toISO(d.data().createdAt) } as Child));
   }
-  return getStore().children.filter((c) => c.createdByParentId === parentId);
+  return getStore().users.filter((u) => u.role === 'child' && (u as Child).createdByParentId === parentId) as Child[];
 }
 
-// ============ ACTIVITIES ============
+// ─── ACTIVITIES ───────────────────────────────────────────────────────────────
+
+function mapActivity(id: string, data: Record<string, unknown>): Activity {
+  return {
+    id,
+    ...data,
+    startDateTime: toISO(data.startDateTime),
+    endDateTime: toISO(data.endDateTime),
+    createdAt: toISO(data.createdAt),
+    updatedAt: toISO(data.updatedAt),
+  } as Activity;
+}
 
 export async function getActivities(): Promise<Activity[]> {
   if (isFirebaseConfigured) {
     const snap = await getDocs(collection(db, 'activities'));
-    return snap.docs.map((d) => {
-      const data = d.data();
-      return {
-        id: d.id,
-        ...data,
-        startDateTime: toISO(data.startDateTime),
-        endDateTime: toISO(data.endDateTime),
-        createdAt: toISO(data.createdAt),
-        updatedAt: toISO(data.updatedAt),
-      } as Activity;
-    });
+    return snap.docs.map((d) => mapActivity(d.id, d.data() as Record<string, unknown>));
   }
   return getStore().activities;
 }
@@ -157,11 +153,7 @@ export async function getActivities(): Promise<Activity[]> {
 export async function createActivity(data: Omit<Activity, 'id' | 'createdAt' | 'updatedAt'>): Promise<Activity> {
   const now = nowISO();
   if (isFirebaseConfigured) {
-    const ref = await addDoc(collection(db, 'activities'), {
-      ...data,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
+    const ref = await addDoc(collection(db, 'activities'), { ...data, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
     return { id: ref.id, ...data, createdAt: now, updatedAt: now };
   }
   const store = getStore();
@@ -179,22 +171,18 @@ export async function updateActivity(id: string, data: Partial<Activity>): Promi
   }
   const store = getStore();
   const idx = store.activities.findIndex((a) => a.id === id);
-  if (idx >= 0) {
-    store.activities[idx] = { ...store.activities[idx], ...data, updatedAt: now };
-    saveStore(store);
-  }
+  if (idx >= 0) store.activities[idx] = { ...store.activities[idx], ...data, updatedAt: now };
+  saveStore(store);
 }
 
 export async function deleteActivity(id: string): Promise<void> {
   if (isFirebaseConfigured) {
     await deleteDoc(doc(db, 'activities', id));
-    // Also clean up escorts and registrations
-    const eq = query(collection(db, 'activityEscorts'), where('activityId', '==', id));
-    const eSnap = await getDocs(eq);
-    for (const d of eSnap.docs) await deleteDoc(d.ref);
-    const rq = query(collection(db, 'activityRegistrations'), where('activityId', '==', id));
-    const rSnap = await getDocs(rq);
-    for (const d of rSnap.docs) await deleteDoc(d.ref);
+    const [eSnap, rSnap] = await Promise.all([
+      getDocs(query(collection(db, 'activityEscorts'), where('activityId', '==', id))),
+      getDocs(query(collection(db, 'activityRegistrations'), where('activityId', '==', id))),
+    ]);
+    await Promise.all([...eSnap.docs.map((d) => deleteDoc(d.ref)), ...rSnap.docs.map((d) => deleteDoc(d.ref))]);
     return;
   }
   const store = getStore();
@@ -204,7 +192,61 @@ export async function deleteActivity(id: string): Promise<void> {
   saveStore(store);
 }
 
-// ============ ESCORTS ============
+// ─── REAL-TIME SUBSCRIPTIONS ──────────────────────────────────────────────────
+
+export function subscribeToActivities(cb: (acts: Activity[]) => void): Unsubscribe {
+  if (!isFirebaseConfigured) {
+    cb(getStore().activities);
+    return () => {};
+  }
+  return onSnapshot(collection(db, 'activities'), (snap) => {
+    cb(snap.docs.map((d) => mapActivity(d.id, d.data() as Record<string, unknown>)));
+  });
+}
+
+export function subscribeToAllEscorts(cb: (escorts: ActivityEscort[]) => void): Unsubscribe {
+  if (!isFirebaseConfigured) {
+    cb(getStore().escorts);
+    return () => {};
+  }
+  return onSnapshot(collection(db, 'activityEscorts'), (snap) => {
+    cb(snap.docs.map((d) => ({ id: d.id, ...d.data(), joinedAt: toISO(d.data().joinedAt) } as ActivityEscort)));
+  });
+}
+
+export function subscribeToAllRegistrations(cb: (regs: ActivityRegistration[]) => void): Unsubscribe {
+  if (!isFirebaseConfigured) {
+    cb(getStore().registrations);
+    return () => {};
+  }
+  return onSnapshot(collection(db, 'activityRegistrations'), (snap) => {
+    cb(snap.docs.map((d) => ({ id: d.id, ...d.data(), registeredAt: toISO(d.data().registeredAt) } as ActivityRegistration)));
+  });
+}
+
+export function subscribeToEscorts(activityId: string, cb: (escorts: ActivityEscort[]) => void): Unsubscribe {
+  if (!isFirebaseConfigured) {
+    cb(getStore().escorts.filter((e) => e.activityId === activityId));
+    return () => {};
+  }
+  const q = query(collection(db, 'activityEscorts'), where('activityId', '==', activityId));
+  return onSnapshot(q, (snap) => {
+    cb(snap.docs.map((d) => ({ id: d.id, ...d.data(), joinedAt: toISO(d.data().joinedAt) } as ActivityEscort)));
+  });
+}
+
+export function subscribeToRegistrations(activityId: string, cb: (regs: ActivityRegistration[]) => void): Unsubscribe {
+  if (!isFirebaseConfigured) {
+    cb(getStore().registrations.filter((r) => r.activityId === activityId));
+    return () => {};
+  }
+  const q = query(collection(db, 'activityRegistrations'), where('activityId', '==', activityId));
+  return onSnapshot(q, (snap) => {
+    cb(snap.docs.map((d) => ({ id: d.id, ...d.data(), registeredAt: toISO(d.data().registeredAt) } as ActivityRegistration)));
+  });
+}
+
+// ─── ESCORTS ──────────────────────────────────────────────────────────────────
 
 export async function getEscortsByActivity(activityId: string): Promise<ActivityEscort[]> {
   if (isFirebaseConfigured) {
@@ -238,7 +280,7 @@ export async function removeEscort(escortId: string): Promise<void> {
   saveStore(store);
 }
 
-// ============ REGISTRATIONS ============
+// ─── REGISTRATIONS ────────────────────────────────────────────────────────────
 
 export async function getRegistrationsByActivity(activityId: string): Promise<ActivityRegistration[]> {
   if (isFirebaseConfigured) {
@@ -247,15 +289,6 @@ export async function getRegistrationsByActivity(activityId: string): Promise<Ac
     return snap.docs.map((d) => ({ id: d.id, ...d.data(), registeredAt: toISO(d.data().registeredAt) } as ActivityRegistration));
   }
   return getStore().registrations.filter((r) => r.activityId === activityId);
-}
-
-export async function getRegistrationsByChild(childId: string): Promise<ActivityRegistration[]> {
-  if (isFirebaseConfigured) {
-    const q = query(collection(db, 'activityRegistrations'), where('childId', '==', childId));
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data(), registeredAt: toISO(d.data().registeredAt) } as ActivityRegistration));
-  }
-  return getStore().registrations.filter((r) => r.childId === childId);
 }
 
 export async function addRegistration(data: Omit<ActivityRegistration, 'id' | 'registeredAt'>): Promise<ActivityRegistration> {
@@ -281,18 +314,18 @@ export async function removeRegistration(regId: string): Promise<void> {
   saveStore(store);
 }
 
-export async function getAllRegistrations(): Promise<ActivityRegistration[]> {
-  if (isFirebaseConfigured) {
-    const snap = await getDocs(collection(db, 'activityRegistrations'));
-    return snap.docs.map((d) => ({ id: d.id, ...d.data(), registeredAt: toISO(d.data().registeredAt) } as ActivityRegistration));
-  }
-  return getStore().registrations;
-}
-
 export async function getAllEscorts(): Promise<ActivityEscort[]> {
   if (isFirebaseConfigured) {
     const snap = await getDocs(collection(db, 'activityEscorts'));
     return snap.docs.map((d) => ({ id: d.id, ...d.data(), joinedAt: toISO(d.data().joinedAt) } as ActivityEscort));
   }
   return getStore().escorts;
+}
+
+export async function getAllRegistrations(): Promise<ActivityRegistration[]> {
+  if (isFirebaseConfigured) {
+    const snap = await getDocs(collection(db, 'activityRegistrations'));
+    return snap.docs.map((d) => ({ id: d.id, ...d.data(), registeredAt: toISO(d.data().registeredAt) } as ActivityRegistration));
+  }
+  return getStore().registrations;
 }

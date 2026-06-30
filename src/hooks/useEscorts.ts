@@ -1,29 +1,32 @@
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { ActivityEscort } from '../types';
-import { getEscortsByActivity, addEscort, removeEscort } from '../firebase/db';
+import { subscribeToEscorts, addEscort, removeEscort } from '../firebase/db';
 
 export function useEscorts(activityId: string) {
   const [escorts, setEscorts] = useState<ActivityEscort[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    const data = await getEscortsByActivity(activityId);
-    setEscorts(data);
-    setLoading(false);
+  useEffect(() => {
+    if (!activityId) return;
+    const unsub = subscribeToEscorts(activityId, (data) => {
+      setEscorts(data);
+      setLoading(false);
+    });
+    return unsub;
   }, [activityId]);
 
-  const join = useCallback(async (data: Omit<ActivityEscort, 'id' | 'joinedAt'>) => {
-    const escort = await addEscort(data);
-    setEscorts((prev) => [...prev, escort]);
-    return escort;
+  const joinEscort = useCallback(async (data: Omit<ActivityEscort, 'id' | 'joinedAt'>) => {
+    // Duplicate check: already escorting?
+    if (escorts.some((e) => e.parentId === data.parentId)) {
+      throw new Error('כבר נרשמת כהורה מלווה לפעילות זו');
+    }
+    return addEscort(data);
+  }, [escorts]);
+
+  const leaveEscort = useCallback(async (escortId: string, isCreator: boolean) => {
+    if (isCreator) throw new Error('ההורה היוזם לא יכול לעזוב את הפעילות');
+    return removeEscort(escortId);
   }, []);
 
-  const leave = useCallback(async (escortId: string, isCreator: boolean) => {
-    if (isCreator) throw new Error('ההורה היוזם לא יכול להסיר את עצמו מהפעילות');
-    await removeEscort(escortId);
-    setEscorts((prev) => prev.filter((e) => e.id !== escortId));
-  }, []);
-
-  return { escorts, loading, loadEscorts: load, joinEscort: join, leaveEscort: leave, setEscorts };
+  return { escorts, loading, joinEscort, leaveEscort };
 }

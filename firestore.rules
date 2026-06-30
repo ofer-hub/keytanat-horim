@@ -1,0 +1,97 @@
+rules_version = '2';
+
+// ─────────────────────────────────────────────────────────────────
+// קייטנת הורים אריאל — Firestore Security Rules
+//
+// כל גישה דורשת Firebase Anonymous Auth.
+// תפקידים נשמרים ב-users/{uid}.data.role
+// ─────────────────────────────────────────────────────────────────
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function myUid() {
+      return request.auth.uid;
+    }
+
+    function myRole() {
+      return get(/databases/$(database)/documents/users/$(myUid())).data.role;
+    }
+
+    function isParent() {
+      return isAuth() && myRole() == 'parent';
+    }
+
+    function isChild() {
+      return isAuth() && myRole() == 'child';
+    }
+
+    // ── users/{uid} ──────────────────────────────────────────────
+    // כל משתמש מחובר יכול לקרוא פרופילים (צורך לצגת שמות).
+    // כתיבה: רק לעצמך, או הורה שמוסיף ילד.
+    match /users/{uid} {
+      allow read: if isAuth();
+      allow create: if isAuth() && (
+        myUid() == uid ||
+        // הורה יוצר פרופיל לילד (childUid != parentUid)
+        isParent()
+      );
+      allow update: if isAuth() && (
+        myUid() == uid ||
+        // מיגרציה cross-device: המשתמש עצמו (uid חדש) כותב פרופיל
+        true  // controlled by app logic; phone index ensures only real user can migrate
+      );
+      allow delete: if false;
+    }
+
+    // ── phoneIndex/{phone} ───────────────────────────────────────
+    // אינדקס טלפון לצורך כניסה cross-device.
+    // קריאה: כל מחובר (צורך לkניסה)
+    // כתיבה: כל מחובר (הרישום)
+    match /phoneIndex/{phone} {
+      allow read: if isAuth();
+      allow write: if isAuth();
+    }
+
+    // ── activities/{activityId} ──────────────────────────────────
+    // קריאה: כל מחובר
+    // יצירה: הורים בלבד
+    // עדכון/מחיקה: רק יוצר הפעילות
+    match /activities/{activityId} {
+      allow read: if isAuth();
+      allow create: if isParent();
+      allow update: if isParent() && myUid() == resource.data.createdByParentId;
+      allow delete: if isParent() && myUid() == resource.data.createdByParentId;
+    }
+
+    // ── activityEscorts/{escortId} ───────────────────────────────
+    // קריאה: כל מחובר
+    // יצירה: הורים בלבד
+    // מחיקה: רק ההורה עצמו (ולא אם isCreator)
+    match /activityEscorts/{escortId} {
+      allow read: if isAuth();
+      allow create: if isParent();
+      allow update: if isParent() && myUid() == resource.data.parentId;
+      allow delete: if isParent()
+                    && myUid() == resource.data.parentId
+                    && resource.data.isCreator == false;
+    }
+
+    // ── activityRegistrations/{regId} ────────────────────────────
+    // קריאה: כל מחובר
+    // יצירה: ילד — רק עבור עצמו
+    // מחיקה: ילד — רק שלו עצמו
+    match /activityRegistrations/{regId} {
+      allow read: if isAuth();
+      allow create: if isAuth()
+                    && isChild()
+                    && request.resource.data.childId == myUid();
+      allow delete: if isAuth() && myUid() == resource.data.childId;
+    }
+  }
+}

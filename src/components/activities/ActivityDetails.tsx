@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
 import Modal from '../common/Modal';
@@ -17,26 +17,33 @@ interface Props {
   onClose: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
-  onActivityUpdated?: () => void;
 }
 
+// ─── Coverage Alert ────────────────────────────────────────────────────────────
 function CoverageAlert({ childCount, seatCount, missingSeats, needsAdditionalEscort }: {
   childCount: number; seatCount: number; missingSeats: number; needsAdditionalEscort: boolean;
 }) {
   if (needsAdditionalEscort) {
     return (
       <div className="alert-missing">
-        <div className="text-lg">🚨 חסר הורה מלווה נוסף!</div>
+        <div className="text-lg font-black">🚨 חסר הורה מלווה נוסף!</div>
         <div className="text-sm font-normal mt-1">
-          נרשמו {childCount} ילדים אך יש רק {seatCount} מקומות ברכבים
+          {childCount} ילדים רשומים · {seatCount} מקומות ברכבים
         </div>
-        <div className="text-base mt-1">חסרים {missingSeats} מקומות ברכבים</div>
+        <div className="text-base font-bold mt-1">חסרים {missingSeats} מקומות</div>
+      </div>
+    );
+  }
+  if (childCount === 0) {
+    return (
+      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-500 text-sm">
+        אין ילדים רשומים עדיין
       </div>
     );
   }
   return (
     <div className="alert-covered">
-      <div className="text-base">✅ הסעה מכוסה</div>
+      <div className="text-base font-bold">✅ הסעה מכוסה</div>
       <div className="text-sm font-normal mt-1">
         {childCount} ילדים · {seatCount} מקומות זמינים
       </div>
@@ -44,10 +51,9 @@ function CoverageAlert({ childCount, seatCount, missingSeats, needsAdditionalEsc
   );
 }
 
+// ─── WhatsApp Panel ────────────────────────────────────────────────────────────
 function WhatsAppPanel({ activity, escorts, registrations }: {
-  activity: Activity;
-  escorts: ActivityEscort[];
-  registrations: ActivityRegistration[];
+  activity: Activity; escorts: ActivityEscort[]; registrations: ActivityRegistration[];
 }) {
   const [show, setShow] = useState(false);
   const [type, setType] = useState<'evening' | 'halfhour'>('evening');
@@ -61,20 +67,10 @@ function WhatsAppPanel({ activity, escorts, registrations }: {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const share = () => {
-    if (navigator.share) {
-      navigator.share({ text: msg });
-    } else {
-      copy();
-    }
-  };
-
   if (!show) {
     return (
-      <button
-        onClick={() => setShow(true)}
-        className="w-full py-2 rounded-xl border-2 border-green-500 text-green-700 font-semibold hover:bg-green-50 transition-colors text-sm"
-      >
+      <button onClick={() => setShow(true)}
+        className="w-full py-2 rounded-xl border-2 border-green-500 text-green-700 font-semibold hover:bg-green-50 transition-colors text-sm">
         📱 הכן הודעת וואטסאפ
       </button>
     );
@@ -83,92 +79,78 @@ function WhatsAppPanel({ activity, escorts, registrations }: {
   return (
     <div className="bg-green-50 border border-green-200 rounded-xl p-4 space-y-3">
       <div className="flex gap-2">
-        <button
-          onClick={() => setType('evening')}
-          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors ${type === 'evening' ? 'bg-green-600 text-white' : 'bg-white text-green-700 border border-green-300'}`}
-        >
-          ערב לפני
-        </button>
-        <button
-          onClick={() => setType('halfhour')}
-          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors ${type === 'halfhour' ? 'bg-green-600 text-white' : 'bg-white text-green-700 border border-green-300'}`}
-        >
-          חצי שעה לפני
-        </button>
+        {(['evening', 'halfhour'] as const).map((t) => (
+          <button key={t} onClick={() => setType(t)}
+            className={`flex-1 py-1.5 rounded-lg text-xs font-semibold ${type === t ? 'bg-green-600 text-white' : 'bg-white text-green-700 border border-green-300'}`}>
+            {t === 'evening' ? 'ערב לפני' : 'חצי שעה לפני'}
+          </button>
+        ))}
       </div>
-      <textarea
-        readOnly
-        value={msg}
-        className="w-full text-sm bg-white border border-green-200 rounded-lg p-3 font-hebrew resize-none"
-        rows={8}
-        dir="rtl"
-      />
+      <textarea readOnly value={msg} className="w-full text-sm bg-white border border-green-200 rounded-lg p-3 resize-none" rows={8} dir="rtl" />
       <div className="flex gap-2">
-        <button
-          onClick={copy}
-          className="flex-1 py-2 rounded-lg bg-green-600 text-white text-sm font-semibold hover:bg-green-700"
-        >
-          {copied ? '✓ הועתק!' : '📋 העתק הודעה'}
+        <button onClick={copy}
+          className="flex-1 py-2 rounded-lg bg-green-600 text-white text-sm font-semibold hover:bg-green-700">
+          {copied ? '✓ הועתק!' : '📋 העתק'}
         </button>
         <button
-          onClick={share}
-          className="flex-1 py-2 rounded-lg bg-white border border-green-400 text-green-700 text-sm font-semibold hover:bg-green-50"
-        >
-          📤 שתף בוואטסאפ
+          onClick={() => navigator.share ? navigator.share({ text: msg }) : copy()}
+          className="flex-1 py-2 rounded-lg bg-white border border-green-400 text-green-700 text-sm font-semibold">
+          📤 שתף
         </button>
       </div>
-      <p className="text-xs text-green-600 text-center">
-        העתק את ההודעה ושלח בקבוצת הוואטסאפ
-      </p>
-      <button onClick={() => setShow(false)} className="text-xs text-gray-400 hover:text-gray-600 w-full text-center">
-        סגור
-      </button>
+      <p className="text-xs text-green-600 text-center">שלח ידנית בקבוצת הוואטסאפ</p>
+      <button onClick={() => setShow(false)} className="text-xs text-gray-400 w-full text-center">סגור</button>
     </div>
   );
 }
 
-export default function ActivityDetails({ activity, onClose, onEdit, onDelete, onActivityUpdated }: Props) {
+// ─── Main Component ────────────────────────────────────────────────────────────
+export default function ActivityDetails({ activity, onClose, onEdit, onDelete }: Props) {
   const { currentUser, isParent, isChild } = useAuth();
-  const { escorts, loadEscorts, joinEscort, leaveEscort } = useEscorts(activity.id);
-  const { registrations, loadRegistrations, register, unregister } = useRegistrations(activity.id);
+  const { escorts, loading: escortsLoading, joinEscort, leaveEscort } = useEscorts(activity.id);
+  const { registrations, loading: regsLoading, register, unregister } = useRegistrations(activity.id);
+
   const [showEscortModal, setShowEscortModal] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [msg, setMsg] = useState('');
+  const [msgType, setMsgType] = useState<'success' | 'error'>('success');
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  useEffect(() => {
-    loadEscorts();
-    loadRegistrations();
-  }, [loadEscorts, loadRegistrations]);
-
+  const loading = escortsLoading || regsLoading;
   const coverage = calculateActivityCoverage(activity, escorts, registrations);
 
   const isCreator = isParent && currentUser?.id === activity.createdByParentId;
-
   const myEscort = isParent ? escorts.find((e) => e.parentId === currentUser?.id) : undefined;
   const myReg = isChild ? registrations.find((r) => r.childId === currentUser?.id) : undefined;
 
+  const showMsg = (text: string, type: 'success' | 'error' = 'success') => {
+    setMsg(text);
+    setMsgType(type);
+    setTimeout(() => setMsg(''), 3000);
+  };
+
   const handleRegister = useCallback(async () => {
     if (!currentUser || !isChild) return;
-    if (myReg) {
-      setActionLoading(true);
-      await unregister(myReg.id);
-      setMsg('הוסרת מהפעילות');
-      setActionLoading(false);
-    } else {
-      setActionLoading(true);
-      await register({
-        activityId: activity.id,
-        childId: currentUser.id,
-        childName: `${currentUser.firstName} ${currentUser.lastName}`,
-        familyId: currentUser.familyId,
-        registeredByUserId: currentUser.id,
-      });
-      setMsg('נרשמת לפעילות!');
-      setActionLoading(false);
+    setActionLoading(true);
+    try {
+      if (myReg) {
+        await unregister(myReg.id);
+        showMsg('הוסרת מהפעילות');
+      } else {
+        await register({
+          activityId: activity.id,
+          childId: currentUser.id,
+          childName: `${currentUser.firstName} ${currentUser.lastName}`,
+          familyId: currentUser.familyId,
+          registeredByUserId: currentUser.id,
+        });
+        showMsg('נרשמת לפעילות! ✓');
+      }
+    } catch (err: unknown) {
+      showMsg(err instanceof Error ? err.message : 'שגיאה', 'error');
     }
-    if (onActivityUpdated) onActivityUpdated();
-  }, [currentUser, isChild, myReg, unregister, register, activity.id, onActivityUpdated]);
+    setActionLoading(false);
+  }, [currentUser, isChild, myReg, register, unregister, activity.id]);
 
   const handleJoinEscort = useCallback(async (seats: number) => {
     if (!currentUser || !isParent) throw new Error('רק הורה יכול להצטרף');
@@ -180,32 +162,24 @@ export default function ActivityDetails({ activity, onClose, onEdit, onDelete, o
       seats,
       isCreator: false,
     });
-    setMsg('הצטרפת כהורה מלווה!');
-    if (onActivityUpdated) onActivityUpdated();
-  }, [currentUser, isParent, joinEscort, activity.id, onActivityUpdated]);
+    showMsg('הצטרפת כהורה מלווה! ✓');
+  }, [currentUser, isParent, joinEscort, activity.id]);
 
   const handleLeaveEscort = useCallback(async () => {
     if (!myEscort) return;
-    if (myEscort.isCreator) {
-      setMsg('ההורה היוזם לא יכול לעזוב את הפעילות');
-      return;
-    }
     setActionLoading(true);
-    await leaveEscort(myEscort.id, myEscort.isCreator);
-    setMsg('הוסרת מרשימת המלווים');
+    try {
+      await leaveEscort(myEscort.id, myEscort.isCreator);
+      showMsg('הוסרת מרשימת המלווים');
+    } catch (err: unknown) {
+      showMsg(err instanceof Error ? err.message : 'שגיאה', 'error');
+    }
     setActionLoading(false);
-    if (onActivityUpdated) onActivityUpdated();
-  }, [myEscort, leaveEscort, onActivityUpdated]);
+  }, [myEscort, leaveEscort]);
 
   const handleDelete = useCallback(async () => {
-    if (!confirmDelete) {
-      setConfirmDelete(true);
-      return;
-    }
-    if (onDelete) {
-      onDelete();
-      onClose();
-    }
+    if (!confirmDelete) { setConfirmDelete(true); return; }
+    if (onDelete) { onDelete(); onClose(); }
   }, [confirmDelete, onDelete, onClose]);
 
   const startDate = new Date(activity.startDateTime);
@@ -219,35 +193,32 @@ export default function ActivityDetails({ activity, onClose, onEdit, onDelete, o
     <>
       <Modal onClose={onClose} title={activity.title} maxWidth="620px">
         <div className="space-y-4">
-          {/* Coverage alert */}
+          {/* Real-time loading indicator */}
+          {loading && (
+            <div className="text-xs text-slate-400 text-center">טוען נתונים...</div>
+          )}
+
           <CoverageAlert {...coverage} />
 
           {/* Date + time */}
           <div className="bg-slate-50 rounded-xl p-4">
             <div className="text-xl font-black text-slate-800 mb-1">{hebrewDate}</div>
             <div className="text-sm text-slate-500">{dateStr}</div>
-            <div className="text-base font-semibold text-slate-700 mt-2">
-              🕐 {startTime} – {endTime}
-            </div>
+            <div className="text-base font-semibold text-slate-700 mt-2">🕐 {startTime} – {endTime}</div>
           </div>
 
           {/* Location + description */}
-          <div className="grid grid-cols-1 gap-3">
+          <div className="space-y-2">
             {activity.location && (
               <div className="flex items-start gap-2 text-sm">
                 <span className="text-lg">📍</span>
-                <div>
-                  <span className="font-semibold text-slate-700">מיקום: </span>
-                  <span className="text-slate-600">{activity.location}</span>
-                </div>
+                <span className="text-slate-600">{activity.location}</span>
               </div>
             )}
             {activity.description && (
               <div className="flex items-start gap-2 text-sm">
                 <span className="text-lg">📝</span>
-                <div>
-                  <span className="text-slate-600 whitespace-pre-wrap">{activity.description}</span>
-                </div>
+                <span className="text-slate-600 whitespace-pre-wrap">{activity.description}</span>
               </div>
             )}
           </div>
@@ -256,37 +227,37 @@ export default function ActivityDetails({ activity, onClose, onEdit, onDelete, o
           <div className="bg-blue-50 rounded-xl p-4">
             <h3 className="font-bold text-slate-700 mb-2">👨‍👩‍👧 הורים מלווים</h3>
             {escorts.length === 0 ? (
-              <p className="text-sm text-slate-400">אין הורים מלווים עדיין</p>
+              <p className="text-sm text-slate-400">אין עדיין</p>
             ) : (
               <div className="space-y-2">
                 {escorts.map((e) => (
                   <div key={e.id} className="flex items-center justify-between text-sm">
-                    <div>
+                    <div className="flex items-center gap-2">
                       <span className="font-semibold text-slate-700">{e.parentName}</span>
-                      {e.isCreator && <span className="mr-2 text-xs bg-blue-200 text-blue-700 px-2 py-0.5 rounded-full">יוזם</span>}
+                      {e.isCreator && <span className="text-xs bg-blue-200 text-blue-700 px-2 py-0.5 rounded-full">יוזם</span>}
                     </div>
-                    <span className="text-slate-500">{e.seats} מקומות ברכב</span>
+                    <span className="text-slate-500">{e.seats} מקומות</span>
                   </div>
                 ))}
               </div>
             )}
             <div className="mt-2 pt-2 border-t border-blue-200 text-sm text-slate-600">
-              סה״כ מקומות: <span className="font-bold">{coverage.seatCount}</span>
+              סה״כ: <span className="font-bold">{coverage.seatCount} מקומות</span>
             </div>
           </div>
 
-          {/* Children registered */}
+          {/* Children */}
           <div className="bg-emerald-50 rounded-xl p-4">
             <h3 className="font-bold text-slate-700 mb-2">👦 ילדים רשומים ({registrations.length})</h3>
             {registrations.length === 0 ? (
-              <p className="text-sm text-slate-400">אין ילדים רשומים עדיין</p>
+              <p className="text-sm text-slate-400">אין עדיין</p>
             ) : (
               <div className="space-y-1">
                 {registrations.map((r) => (
                   <div key={r.id} className="text-sm text-slate-700 flex items-center gap-2">
                     <span className="text-emerald-500">•</span>
                     {r.childName}
-                    {r.childId === currentUser?.id && <span className="text-xs text-emerald-600 font-semibold">(אני)</span>}
+                    {r.childId === currentUser?.id && <span className="text-xs text-emerald-600 font-bold">(אני)</span>}
                   </div>
                 ))}
               </div>
@@ -295,99 +266,78 @@ export default function ActivityDetails({ activity, onClose, onEdit, onDelete, o
 
           {/* Feedback message */}
           {msg && (
-            <div className="bg-blue-50 border border-blue-200 text-blue-700 rounded-lg p-3 text-sm font-medium text-center">
+            <div className={`rounded-lg p-3 text-sm font-medium text-center ${
+              msgType === 'error' ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-blue-50 border border-blue-200 text-blue-700'
+            }`}>
               {msg}
             </div>
           )}
 
-          {/* Actions */}
+          {/* ── Actions ── */}
           <div className="space-y-2 pt-2 border-t border-gray-100">
-            {/* Child actions */}
+
+            {/* Child: register/unregister */}
             {isChild && (
-              <button
-                onClick={handleRegister}
-                disabled={actionLoading}
+              <button onClick={handleRegister} disabled={actionLoading}
                 className={`w-full py-3 rounded-xl font-bold text-white transition-colors disabled:opacity-50 ${
                   myReg ? 'bg-red-500 hover:bg-red-600' : 'bg-emerald-600 hover:bg-emerald-700'
-                }`}
-              >
+                }`}>
                 {actionLoading ? '...' : myReg ? '❌ בטל הרשמה שלי' : '✅ הירשם לפעילות'}
               </button>
             )}
 
-            {/* Parent: join/leave escort */}
+            {/* Parent: join as escort */}
             {isParent && !myEscort && (
-              coverage.needsAdditionalEscort ? (
-                <button
-                  onClick={() => setShowEscortModal(true)}
-                  className="w-full py-3 rounded-xl bg-red-600 text-white font-bold hover:bg-red-700 transition-colors"
-                >
-                  🚗 אני מצטרף/ת כהורה מלווה (דרוש!)
-                </button>
-              ) : (
-                <button
-                  onClick={() => setShowEscortModal(true)}
-                  className="w-full py-3 rounded-xl border-2 border-blue-500 text-blue-700 font-semibold hover:bg-blue-50 transition-colors"
-                >
-                  🚗 הצטרף/י כהורה מלווה נוסף
-                </button>
-              )
+              <button onClick={() => setShowEscortModal(true)}
+                className={`w-full py-3 rounded-xl font-bold text-white transition-colors ${
+                  coverage.needsAdditionalEscort
+                    ? 'bg-red-600 hover:bg-red-700'
+                    : 'bg-blue-600 hover:bg-blue-700'
+                }`}>
+                🚗 {coverage.needsAdditionalEscort ? 'הצטרף/י כהורה מלווה (דרוש!)' : 'הצטרף/י כהורה מלווה'}
+              </button>
             )}
 
+            {/* Parent: leave escort (not creator) */}
             {isParent && myEscort && !myEscort.isCreator && (
-              <button
-                onClick={handleLeaveEscort}
-                disabled={actionLoading}
-                className="w-full py-2 rounded-xl border border-gray-300 text-gray-600 font-medium hover:bg-gray-50 text-sm disabled:opacity-50"
-              >
+              <button onClick={handleLeaveEscort} disabled={actionLoading}
+                className="w-full py-2 rounded-xl border border-gray-300 text-gray-600 font-medium hover:bg-gray-50 text-sm disabled:opacity-50">
                 הסר אותי מהמלווים
               </button>
             )}
 
             {/* ICS */}
             {(myReg || myEscort) && (
-              <button
-                onClick={() => downloadICS(activity)}
-                className="w-full py-2 rounded-xl border-2 border-indigo-400 text-indigo-700 font-semibold hover:bg-indigo-50 transition-colors text-sm"
-              >
+              <button onClick={() => downloadICS(activity)}
+                className="w-full py-2 rounded-xl border-2 border-indigo-400 text-indigo-700 font-semibold hover:bg-indigo-50 transition-colors text-sm">
                 📅 הוסף ליומן שלי (עם תזכורות)
               </button>
             )}
 
             {/* WhatsApp — parents only */}
             {isParent && (
-              <WhatsAppPanel
-                activity={activity}
-                escorts={escorts}
-                registrations={registrations}
-              />
+              <WhatsAppPanel activity={activity} escorts={escorts} registrations={registrations} />
             )}
 
-            {/* Edit/Delete — creator only */}
+            {/* Edit / Delete — creator only */}
             {isCreator && (
               <div className="flex gap-2 pt-2">
-                <button
-                  onClick={onEdit}
-                  className="flex-1 py-2 rounded-xl bg-amber-100 text-amber-800 font-semibold hover:bg-amber-200 text-sm"
-                >
-                  ✏️ ערוך פעילות
+                <button onClick={onEdit}
+                  className="flex-1 py-2 rounded-xl bg-amber-100 text-amber-800 font-semibold hover:bg-amber-200 text-sm">
+                  ✏️ ערוך
                 </button>
-                <button
-                  onClick={handleDelete}
+                <button onClick={handleDelete}
                   className={`flex-1 py-2 rounded-xl font-semibold text-sm transition-colors ${
-                    confirmDelete
-                      ? 'bg-red-600 text-white hover:bg-red-700'
-                      : 'bg-red-100 text-red-700 hover:bg-red-200'
-                  }`}
-                >
-                  {confirmDelete ? '⚠️ לחץ שוב למחיקה' : '🗑️ מחק פעילות'}
+                    confirmDelete ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-red-100 text-red-700 hover:bg-red-200'
+                  }`}>
+                  {confirmDelete ? '⚠️ לחץ שוב למחיקה' : '🗑️ מחק'}
                 </button>
               </div>
             )}
           </div>
 
           <p className="text-xs text-slate-400 text-center">
-            💡 לתזכורת אמינה — הוסף את הפעילות ליומן האישי
+            💡 לתזכורת אמינה — הוסף ליומן האישי
           </p>
         </div>
       </Modal>

@@ -104,13 +104,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (phone: string, code: string) => {
     const normalized = normalizePhone(phone);
 
-    // Admin login via env credentials
+    // Admin login via env credentials — validate locally, sync Firestore in background
     if (ADMIN_PHONE && normalized === normalizePhone(ADMIN_PHONE)) {
       if (!ADMIN_CODE || code.trim() !== ADMIN_CODE) return { ok: false, error: 'קוד אדמין שגוי' };
-      if (!firebaseUid) return { ok: false, error: 'שגיאת חיבור — נסה שוב' };
-      let user = await getUserByUid(firebaseUid);
-      if (!user || user.role !== 'admin') user = await createAdminUser(firebaseUid, normalized);
-      persist(user);
+      const uid = firebaseUid ?? ('admin_' + Date.now().toString(36));
+      const adminUser: AppUser = {
+        id: uid, uid, role: 'admin',
+        firstName: 'מנהל', lastName: 'מערכת',
+        phone: normalized, familyId: 'admin',
+        createdAt: new Date().toISOString(),
+      };
+      persist(adminUser);
+      // Sync to Firestore non-blocking — don't await
+      getUserByUid(uid).then((existing) => {
+        if (!existing || existing.role !== 'admin') createAdminUser(uid, normalized).catch(() => {});
+      }).catch(() => {});
       return { ok: true };
     }
 

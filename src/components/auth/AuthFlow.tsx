@@ -24,18 +24,28 @@ export default function AuthFlow({ onBack }: Props) {
     e.preventDefault();
     resetError();
     setLoading(true);
-    const result = await checkPhone(phone);
-    setLoading(false);
-    setPhase(result.exists ? 'code' : 'register');
+    try {
+      const result = await checkPhone(phone);
+      setPhase(result.exists ? 'code' : 'register');
+    } catch {
+      setError('שגיאת חיבור — בדוק אינטרנט ונסה שוב');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     resetError();
     setLoading(true);
-    const result = await login(phone, code);
-    setLoading(false);
-    if (!result.ok) setError(result.error ?? 'שגיאה');
+    try {
+      const result = await login(phone, code);
+      if (!result.ok) setError(result.error ?? 'שגיאה');
+    } catch {
+      setError('שגיאת חיבור — בדוק אינטרנט ונסה שוב');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -44,14 +54,19 @@ export default function AuthFlow({ onBack }: Props) {
     if (form.accessCode !== form.accessCode2) { setError('הקודים אינם תואמים'); return; }
     if (form.accessCode.length < 4) { setError('קוד כניסה חייב להיות לפחות 4 תווים'); return; }
     setLoading(true);
-    const result = await registerParent({
-      firstName: form.firstName,
-      lastName: form.lastName,
-      phone,
-      accessCode: form.accessCode,
-    });
-    setLoading(false);
-    if (!result.ok) setError(result.error ?? 'שגיאה ברישום');
+    try {
+      const result = await registerParent({
+        firstName: form.firstName,
+        lastName: form.lastName,
+        phone,
+        accessCode: form.accessCode,
+      });
+      if (!result.ok) setError(result.error ?? 'שגיאה ברישום');
+    } catch {
+      setError('שגיאת חיבור — בדוק אינטרנט ונסה שוב');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const goToPhone = () => { resetError(); setPhase('phone'); };

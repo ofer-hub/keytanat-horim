@@ -6,9 +6,10 @@ import AddChildScreen from '../auth/AddChildScreen';
 
 interface Props {
   onBack: () => void;
+  onGoToCalendar: () => void;
 }
 
-export default function FamilyScreen({ onBack }: Props) {
+export default function FamilyScreen({ onBack, onGoToCalendar }: Props) {
   const { currentUser, isParent, logout } = useAuth();
   const [children, setChildren] = useState<Child[]>([]);
   const [childRegs, setChildRegs] = useState<ActivityRegistration[]>([] as ActivityRegistration[]);
@@ -28,7 +29,12 @@ export default function FamilyScreen({ onBack }: Props) {
   };
 
   if (showAddChild) {
-    return <AddChildScreen onBack={() => { setShowAddChild(false); loadChildren(); }} />;
+    return (
+      <AddChildScreen
+        onBack={() => { setShowAddChild(false); loadChildren(); }}
+        onGoToCalendar={onGoToCalendar}
+      />
+    );
   }
 
   return (

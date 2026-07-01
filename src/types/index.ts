@@ -1,4 +1,4 @@
-export type UserRole = 'parent' | 'child';
+export type UserRole = 'parent' | 'child' | 'admin';
 
 export interface Parent {
   id: string;       // Firebase UID (anonymous)
@@ -7,7 +7,7 @@ export interface Parent {
   firstName: string;
   lastName: string;
   phone: string;
-  accessCode: string;
+  accessCode?: string;  // not stored in Firestore users doc; only in phoneIndex and localStorage session
   familyId: string;
   createdAt: string;
 }
@@ -19,13 +19,24 @@ export interface Child {
   firstName: string;
   lastName: string;
   phone: string;
-  accessCode: string;
+  accessCode?: string;  // not stored in Firestore users doc; only in phoneIndex and localStorage session
   familyId: string;
   createdByParentId: string;
   createdAt: string;
 }
 
-export type AppUser = Parent | Child;
+export interface Admin {
+  id: string;
+  uid: string;
+  role: 'admin';
+  firstName: string;
+  lastName: string;
+  phone: string;
+  familyId: string;
+  createdAt: string;
+}
+
+export type AppUser = Parent | Child | Admin;
 
 export interface Activity {
   id: string;
@@ -43,6 +54,8 @@ export interface Activity {
   eveningReminderMarkedSentAt?: string;
   halfHourReminderMarkedSent: boolean;
   halfHourReminderMarkedSentAt?: string;
+  childCount?: number;
+  seatCount?: number;
 }
 
 export interface ActivityEscort {
@@ -83,6 +96,7 @@ export interface PrayerEvent {
   extendedProps: {
     isPrayer: true;
     location: string;
+    isFastDay?: boolean;
   };
 }
 

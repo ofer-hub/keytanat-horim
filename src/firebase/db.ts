@@ -1,6 +1,6 @@
 import {
   collection, doc, getDocs, getDoc, addDoc, setDoc, updateDoc, deleteDoc,
-  query, where, onSnapshot, serverTimestamp, Timestamp,
+  query, where, onSnapshot, serverTimestamp, Timestamp, increment,
   type Unsubscribe,
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from './config';
@@ -21,7 +21,7 @@ function toISO(val: unknown): string {
 // ─── LocalStorage Store ───────────────────────────────────────────────────────
 
 interface Store {
-  users: (Parent | Child)[];
+  users: AppUser[];
   phoneIndex: Record<string, { uid: string; accessCode: string; role: string }>;
   activities: Activity[];
   escorts: ActivityEscort[];
@@ -68,39 +68,66 @@ export async function getPhoneIndex(phone: string): Promise<PhoneIndex | null> {
 
 export async function createUserProfile(
   uid: string,
-  data: Omit<AppUser, 'id' | 'uid' | 'createdAt'>
-): Promise<AppUser> {
+  data: Omit<Parent | Child, 'id' | 'uid' | 'createdAt'>
+): Promise<Parent | Child> {
   const now = nowISO();
   if (isFirebaseConfigured) {
-    await setDoc(doc(db, 'users', uid), { ...data, uid, createdAt: serverTimestamp() });
+    // accessCode stays in phoneIndex only — never written to the users doc
+    const { accessCode, ...profileData } = data as Record<string, unknown>;
+    await setDoc(doc(db, 'users', uid), { ...profileData, uid, createdAt: serverTimestamp() });
     await setDoc(doc(db, 'phoneIndex', data.phone), {
       uid,
-      accessCode: data.accessCode,
+      accessCode: accessCode ?? '',
       role: data.role,
     });
-    return { id: uid, uid, ...data, createdAt: now } as AppUser;
+    // Return includes accessCode so it can be stored in the localStorage session
+    return { id: uid, uid, ...data, createdAt: now } as Parent | Child;
   }
   const store = getStore();
-  const user = { id: uid, uid, ...data, createdAt: now } as AppUser;
+  const user = { id: uid, uid, ...data, createdAt: now } as Parent | Child;
   store.users = store.users.filter((u) => u.id !== uid);
   store.users.push(user);
-  store.phoneIndex[data.phone] = { uid, accessCode: data.accessCode, role: data.role };
+  store.phoneIndex[data.phone] = { uid, accessCode: data.accessCode ?? '', role: data.role };
   saveStore(store);
   return user;
 }
 
-/** Update uid for existing phone (cross-device: user logs in on new device) */
-export async function migratePhoneToUid(phone: string, newUid: string, existingData: AppUser): Promise<void> {
+/** Restore profile on new device (cross-device login: creates users/{newUid}, phoneIndex stays). */
+export async function migratePhoneToUid(phone: string, newUid: string, existingData: Parent | Child): Promise<void> {
   if (isFirebaseConfigured) {
-    await setDoc(doc(db, 'users', newUid), { ...existingData, uid: newUid, updatedAt: serverTimestamp() });
-    await setDoc(doc(db, 'phoneIndex', phone), { uid: newUid, accessCode: existingData.accessCode, role: existingData.role });
+    // Strip accessCode — never write it to the users doc
+    const { accessCode: _dropped, ...safeProfile } = existingData as unknown as Record<string, unknown>;
+    void _dropped;
+    await setDoc(doc(db, 'users', newUid), { ...safeProfile, uid: newUid, updatedAt: serverTimestamp() });
+    // phoneIndex is NOT updated — rules block it (update: if false)
+    // phoneIndex will keep pointing to the original device's uid
     return;
   }
   const store = getStore();
   store.users = store.users.filter((u) => u.id !== existingData.id);
   store.users.push({ ...existingData, id: newUid, uid: newUid });
-  store.phoneIndex[phone] = { uid: newUid, accessCode: existingData.accessCode, role: existingData.role };
+  const existingEntry = store.phoneIndex[phone];
+  store.phoneIndex[phone] = {
+    uid: newUid,
+    accessCode: existingData.accessCode ?? existingEntry?.accessCode ?? '',
+    role: existingData.role,
+  };
   saveStore(store);
+}
+
+export async function createAdminUser(uid: string, phone: string): Promise<AppUser> {
+  const now = nowISO();
+  const data = { role: 'admin' as const, firstName: 'מנהל', lastName: 'מערכת', phone, familyId: 'admin' };
+  if (isFirebaseConfigured) {
+    await setDoc(doc(db, 'users', uid), { ...data, uid, createdAt: serverTimestamp() });
+    return { id: uid, uid, ...data, createdAt: now };
+  }
+  const store = getStore();
+  const user: AppUser = { id: uid, uid, ...data, createdAt: now };
+  store.users = store.users.filter((u) => u.id !== uid);
+  store.users.push(user);
+  saveStore(store);
+  return user;
 }
 
 export async function getAllUsers(): Promise<AppUser[]> {
@@ -139,6 +166,8 @@ function mapActivity(id: string, data: Record<string, unknown>): Activity {
     endDateTime: toISO(data.endDateTime),
     createdAt: toISO(data.createdAt),
     updatedAt: toISO(data.updatedAt),
+    childCount: typeof data.childCount === 'number' ? data.childCount : 0,
+    seatCount: typeof data.seatCount === 'number' ? data.seatCount : 0,
   } as Activity;
 }
 
@@ -153,11 +182,13 @@ export async function getActivities(): Promise<Activity[]> {
 export async function createActivity(data: Omit<Activity, 'id' | 'createdAt' | 'updatedAt'>): Promise<Activity> {
   const now = nowISO();
   if (isFirebaseConfigured) {
-    const ref = await addDoc(collection(db, 'activities'), { ...data, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
-    return { id: ref.id, ...data, createdAt: now, updatedAt: now };
+    const ref = await addDoc(collection(db, 'activities'), {
+      ...data, childCount: 0, seatCount: 0, createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    });
+    return { id: ref.id, ...data, childCount: 0, seatCount: 0, createdAt: now, updatedAt: now };
   }
   const store = getStore();
-  const activity: Activity = { id: newId(), ...data, createdAt: now, updatedAt: now };
+  const activity: Activity = { id: newId(), ...data, childCount: 0, seatCount: 0, createdAt: now, updatedAt: now };
   store.activities.push(activity);
   saveStore(store);
   return activity;
@@ -261,21 +292,35 @@ export async function addEscort(data: Omit<ActivityEscort, 'id' | 'joinedAt'>): 
   const now = nowISO();
   if (isFirebaseConfigured) {
     const ref = await addDoc(collection(db, 'activityEscorts'), { ...data, joinedAt: serverTimestamp() });
+    await updateDoc(doc(db, 'activities', data.activityId), { seatCount: increment(data.seats) });
     return { id: ref.id, ...data, joinedAt: now };
   }
   const store = getStore();
   const escort: ActivityEscort = { id: newId(), ...data, joinedAt: now };
   store.escorts.push(escort);
+  const ai = store.activities.findIndex((a) => a.id === data.activityId);
+  if (ai >= 0) store.activities[ai].seatCount = (store.activities[ai].seatCount ?? 0) + data.seats;
   saveStore(store);
   return escort;
 }
 
 export async function removeEscort(escortId: string): Promise<void> {
   if (isFirebaseConfigured) {
-    await deleteDoc(doc(db, 'activityEscorts', escortId));
+    const ref = doc(db, 'activityEscorts', escortId);
+    const snap = await getDoc(ref);
+    await deleteDoc(ref);
+    if (snap.exists()) {
+      const d = snap.data() as { activityId: string; seats: number };
+      await updateDoc(doc(db, 'activities', d.activityId), { seatCount: increment(-d.seats) });
+    }
     return;
   }
   const store = getStore();
+  const escort = store.escorts.find((e) => e.id === escortId);
+  if (escort) {
+    const ai = store.activities.findIndex((a) => a.id === escort.activityId);
+    if (ai >= 0) store.activities[ai].seatCount = Math.max(0, (store.activities[ai].seatCount ?? 0) - escort.seats);
+  }
   store.escorts = store.escorts.filter((e) => e.id !== escortId);
   saveStore(store);
 }
@@ -295,22 +340,61 @@ export async function addRegistration(data: Omit<ActivityRegistration, 'id' | 'r
   const now = nowISO();
   if (isFirebaseConfigured) {
     const ref = await addDoc(collection(db, 'activityRegistrations'), { ...data, registeredAt: serverTimestamp() });
+    await updateDoc(doc(db, 'activities', data.activityId), { childCount: increment(1) });
     return { id: ref.id, ...data, registeredAt: now };
   }
   const store = getStore();
   const reg: ActivityRegistration = { id: newId(), ...data, registeredAt: now };
   store.registrations.push(reg);
+  const ai = store.activities.findIndex((a) => a.id === data.activityId);
+  if (ai >= 0) store.activities[ai].childCount = (store.activities[ai].childCount ?? 0) + 1;
   saveStore(store);
   return reg;
 }
 
 export async function removeRegistration(regId: string): Promise<void> {
   if (isFirebaseConfigured) {
-    await deleteDoc(doc(db, 'activityRegistrations', regId));
+    const ref = doc(db, 'activityRegistrations', regId);
+    const snap = await getDoc(ref);
+    await deleteDoc(ref);
+    if (snap.exists()) {
+      const d = snap.data() as { activityId: string };
+      await updateDoc(doc(db, 'activities', d.activityId), { childCount: increment(-1) });
+    }
     return;
   }
   const store = getStore();
+  const reg = store.registrations.find((r) => r.id === regId);
+  if (reg) {
+    const ai = store.activities.findIndex((a) => a.id === reg.activityId);
+    if (ai >= 0) store.activities[ai].childCount = Math.max(0, (store.activities[ai].childCount ?? 0) - 1);
+  }
   store.registrations = store.registrations.filter((r) => r.id !== regId);
+  saveStore(store);
+}
+
+// ─── ADMIN OPERATIONS ────────────────────────────────────────────────────────
+
+export async function adminDeleteUser(uid: string, phone: string): Promise<void> {
+  if (isFirebaseConfigured) {
+    await deleteDoc(doc(db, 'users', uid));
+    await deleteDoc(doc(db, 'phoneIndex', phone));
+    return;
+  }
+  const store = getStore();
+  store.users = store.users.filter((u) => u.id !== uid);
+  delete store.phoneIndex[phone];
+  saveStore(store);
+}
+
+export async function adminUpdateUser(uid: string, data: { firstName: string; lastName: string }): Promise<void> {
+  if (isFirebaseConfigured) {
+    await updateDoc(doc(db, 'users', uid), data);
+    return;
+  }
+  const store = getStore();
+  const idx = store.users.findIndex((u) => u.id === uid);
+  if (idx >= 0) store.users[idx] = { ...store.users[idx], ...data };
   saveStore(store);
 }
 

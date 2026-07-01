@@ -16,6 +16,9 @@ const firebaseConfig = {
 
 export const isFirebaseConfigured = !!firebaseConfig.projectId;
 
+export const ADMIN_PHONE: string = (import.meta.env.VITE_ADMIN_PHONE as string) ?? '';
+export const ADMIN_CODE: string = (import.meta.env.VITE_ADMIN_CODE as string) ?? '';
+
 let _app: FirebaseApp | undefined;
 let _db: Firestore | undefined;
 let _auth: Auth | undefined;

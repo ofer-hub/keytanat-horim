@@ -59,9 +59,19 @@ html, body {
   padding: 4px !important;
 }
 
-/* Shabbat / Friday styling */
-.fc-day-sat, .fc-day-fri {
-  background-color: #faf5ff !important;
+/* Friday — light blue */
+.fc-day-fri {
+  background-color: #eff6ff !important;
+}
+
+/* Saturday — stronger blue */
+.fc-day-sat {
+  background-color: #bfdbfe !important;
+}
+
+/* Fast day cell background */
+.fast-day-cell {
+  background-color: #e5e7eb !important;
 }
 
 .fc-timegrid-slot {
@@ -85,6 +95,12 @@ html, body {
 .event-prayer {
   background-color: #3b82f6 !important;
   opacity: 0.85;
+}
+
+/* Fast day events */
+.event-fast-day {
+  background-color: #6b7280 !important;
+  opacity: 0.95;
 }
 
 /* Activity covered */
@@ -134,6 +150,17 @@ html, body {
   font-size: 0.85rem;
   color: #1e293b;
   font-weight: 700;
+}
+
+.parasha-name {
+  font-size: 0.7rem;
+  color: #1d4ed8;
+  font-weight: 700;
+  text-align: right;
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Modal overlay */

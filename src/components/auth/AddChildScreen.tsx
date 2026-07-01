@@ -5,9 +5,10 @@ import type { Child } from '../../types';
 
 interface Props {
   onBack: () => void;
+  onGoToCalendar: () => void;
 }
 
-export default function AddChildScreen({ onBack }: Props) {
+export default function AddChildScreen({ onBack, onGoToCalendar }: Props) {
   const { currentUser, addChild } = useAuth();
   const [children, setChildren] = useState<Child[]>([]);
   const [form, setForm] = useState({ firstName: '', phone: '', accessCode: '', accessCode2: '' });
@@ -65,7 +66,7 @@ export default function AddChildScreen({ onBack }: Props) {
         <div className="flex items-center gap-3 mb-6">
           <button onClick={onBack} className="text-gray-400 hover:text-gray-600 text-xl">←</button>
           <div>
-            <h1 className="text-xl font-bold text-slate-800">הוספת ילד/ה</h1>
+            <h1 className="text-2xl font-black text-slate-800">מסך רישום ילד/ה</h1>
             <p className="text-slate-500 text-xs">משפחת {currentUser.lastName}</p>
           </div>
         </div>
@@ -113,7 +114,7 @@ export default function AddChildScreen({ onBack }: Props) {
               type="tel"
               className="form-input"
               value={form.phone}
-              onChange={(e) => set('phone', e.target.value)}
+              onChange={(e) => set('phone', e.target.value.replace(/[^\d-]/g, ''))}
               required
               placeholder="050-0000000"
               dir="ltr"
@@ -153,8 +154,17 @@ export default function AddChildScreen({ onBack }: Props) {
             </div>
           )}
           {success && (
-            <div className="bg-green-50 border border-green-300 text-green-700 rounded-lg p-3 text-sm font-medium">
-              ✓ {success}
+            <div className="space-y-3">
+              <div className="bg-green-50 border border-green-300 text-green-700 rounded-lg p-3 text-sm font-medium">
+                ✓ {success}
+              </div>
+              <button
+                type="button"
+                onClick={onGoToCalendar}
+                className="w-full py-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 transition-colors"
+              >
+                📅 חזרה ללוח הפעילויות
+              </button>
             </div>
           )}
 
@@ -163,7 +173,7 @@ export default function AddChildScreen({ onBack }: Props) {
             disabled={loading}
             className="w-full py-3 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition-colors disabled:opacity-50"
           >
-            {loading ? 'מוסיף...' : 'הוסף ילד/ה'}
+            {loading ? 'מוסיף...' : success ? '+ הוסף ילד/ה נוסף/ת' : 'הוסף ילד/ה'}
           </button>
         </form>
       </div>

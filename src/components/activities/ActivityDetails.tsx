@@ -17,6 +17,8 @@ interface Props {
   onClose: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  isGuest?: boolean;
+  onLoginClick?: () => void;
 }
 
 // ─── Coverage Alert ────────────────────────────────────────────────────────────
@@ -105,8 +107,9 @@ function WhatsAppPanel({ activity, escorts, registrations }: {
 }
 
 // ─── Main Component ────────────────────────────────────────────────────────────
-export default function ActivityDetails({ activity, onClose, onEdit, onDelete }: Props) {
+export default function ActivityDetails({ activity, onClose, onEdit, onDelete, isGuest, onLoginClick }: Props) {
   const { currentUser, isParent, isChild } = useAuth();
+  // Hooks must be called unconditionally; for guests the data loads but isn't displayed
   const { escorts, loading: escortsLoading, joinEscort, leaveEscort } = useEscorts(activity.id);
   const { registrations, loading: regsLoading, register, unregister } = useRegistrations(activity.id);
 
@@ -117,7 +120,14 @@ export default function ActivityDetails({ activity, onClose, onEdit, onDelete }:
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const loading = escortsLoading || regsLoading;
-  const coverage = calculateActivityCoverage(activity, escorts, registrations);
+  const coverage = isGuest
+    ? {
+        childCount: activity.childCount ?? 0,
+        seatCount: activity.seatCount ?? 0,
+        missingSeats: Math.max(0, (activity.childCount ?? 0) - (activity.seatCount ?? 0)),
+        needsAdditionalEscort: (activity.childCount ?? 0) > (activity.seatCount ?? 0),
+      }
+    : calculateActivityCoverage(activity, escorts, registrations);
 
   const isCreator = isParent && currentUser?.id === activity.createdByParentId;
   const myEscort = isParent ? escorts.find((e) => e.parentId === currentUser?.id) : undefined;
@@ -189,11 +199,75 @@ export default function ActivityDetails({ activity, onClose, onEdit, onDelete }:
   const startTime = format(startDate, 'HH:mm');
   const endTime = format(endDate, 'HH:mm');
 
+  // ── Guest view: public info only, no sensitive data ───────────
+  if (isGuest) {
+    return (
+      <Modal onClose={onClose} title={activity.title} maxWidth="540px">
+        <div className="space-y-4">
+          <CoverageAlert {...coverage} />
+
+          <div className="bg-slate-50 rounded-xl p-4">
+            <div className="text-xl font-black text-slate-800 mb-1">{hebrewDate}</div>
+            <div className="text-sm text-slate-500">{dateStr}</div>
+            <div className="text-base font-semibold text-slate-700 mt-2">🕐 {startTime} – {endTime}</div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-start gap-2 text-sm">
+              <span className="text-lg">👤</span>
+              <span className="text-slate-600">יוצר: <span className="font-semibold">{activity.createdByParentName}</span></span>
+            </div>
+            {activity.location && (
+              <div className="flex items-start gap-2 text-sm">
+                <span className="text-lg">📍</span>
+                <span className="text-slate-600">{activity.location}</span>
+              </div>
+            )}
+            {activity.description && (
+              <div className="flex items-start gap-2 text-sm">
+                <span className="text-lg">📝</span>
+                <span className="text-slate-600 whitespace-pre-wrap">{activity.description}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="bg-emerald-50 rounded-xl p-3">
+              <div className="text-2xl font-black text-emerald-700">{coverage.childCount}</div>
+              <div className="text-xs text-emerald-600 mt-1">ילדים רשומים</div>
+            </div>
+            <div className="bg-blue-50 rounded-xl p-3">
+              <div className="text-2xl font-black text-blue-700">{coverage.seatCount}</div>
+              <div className="text-xs text-blue-600 mt-1">מקומות ברכבים</div>
+            </div>
+            <div className={`rounded-xl p-3 ${coverage.needsAdditionalEscort ? 'bg-red-50' : 'bg-slate-50'}`}>
+              <div className={`text-2xl font-black ${coverage.needsAdditionalEscort ? 'text-red-600' : 'text-slate-400'}`}>
+                {coverage.missingSeats}
+              </div>
+              <div className={`text-xs mt-1 ${coverage.needsAdditionalEscort ? 'text-red-500' : 'text-slate-400'}`}>
+                מקומות חסרים
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-gray-100 pt-4 text-center space-y-2">
+            <p className="text-sm text-slate-500">לרישום ופעולות — יש להיכנס תחילה</p>
+            <button
+              onClick={() => { onClose(); onLoginClick?.(); }}
+              className="w-full py-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 transition-colors"
+            >
+              כניסה / הרשמה
+            </button>
+          </div>
+        </div>
+      </Modal>
+    );
+  }
+
   return (
     <>
       <Modal onClose={onClose} title={activity.title} maxWidth="620px">
         <div className="space-y-4">
-          {/* Real-time loading indicator */}
           {loading && (
             <div className="text-xs text-slate-400 text-center">טוען נתונים...</div>
           )}
@@ -209,6 +283,10 @@ export default function ActivityDetails({ activity, onClose, onEdit, onDelete }:
 
           {/* Location + description */}
           <div className="space-y-2">
+            <div className="flex items-start gap-2 text-sm">
+              <span className="text-lg">👤</span>
+              <span className="text-slate-600">יוצר: <span className="font-semibold">{activity.createdByParentName}</span></span>
+            </div>
             {activity.location && (
               <div className="flex items-start gap-2 text-sm">
                 <span className="text-lg">📍</span>

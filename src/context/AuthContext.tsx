@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import type { AppUser, Parent } from '../types';
+import type { AppUser, Parent, Child, UserRole } from '../types';
 import { firebaseAuth, isFirebaseConfigured } from '../firebase/config';
 import {
   getUserByUid,
@@ -8,9 +8,11 @@ import {
   createUserProfile,
   migratePhoneToUid,
   getChildrenByParent,
+  createAdminUser,
 } from '../firebase/db';
+import { ADMIN_PHONE, ADMIN_CODE } from '../firebase/config';
+import { normalizePhone } from '../utils/phone';
 
-const PARENT_CODE = import.meta.env.VITE_PARENT_CODE || 'horim2026';
 const SESSION_KEY = 'keytanat_session_v2';
 const LOCAL_UID_KEY = 'keytanat_local_uid';
 
@@ -27,14 +29,13 @@ interface AuthContextValue {
   currentUser: AppUser | null;
   firebaseUid: string | null;
   loading: boolean;
-  loginAsParent: (phone: string, code: string) => Promise<{ ok: boolean; error?: string }>;
-  loginAsChild: (phone: string, code: string) => Promise<{ ok: boolean; error?: string }>;
+  checkPhone: (phone: string) => Promise<{ exists: boolean; role?: UserRole }>;
+  login: (phone: string, code: string) => Promise<{ ok: boolean; error?: string }>;
   registerParent: (data: {
     firstName: string;
     lastName: string;
     phone: string;
     accessCode: string;
-    parentCode: string;
   }) => Promise<{ ok: boolean; error?: string }>;
   addChild: (data: {
     firstName: string;
@@ -45,6 +46,7 @@ interface AuthContextValue {
   logout: () => void;
   isParent: boolean;
   isChild: boolean;
+  isAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -91,37 +93,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setCurrentUser(user);
   }, []);
 
-  const loginAsParent = useCallback(async (phone: string, code: string) => {
-    const phoneEntry = await getPhoneIndex(phone.trim());
-    if (!phoneEntry) return { ok: false, error: 'לא נמצא הורה עם מספר זה' };
-    if (phoneEntry.role !== 'parent') return { ok: false, error: 'מספר זה רשום כילד, לא כהורה' };
-    if (phoneEntry.accessCode !== code.trim()) return { ok: false, error: 'קוד שגוי' };
+  const checkPhone = useCallback(async (phone: string) => {
+    const normalized = normalizePhone(phone);
+    if (ADMIN_PHONE && normalized === normalizePhone(ADMIN_PHONE)) return { exists: true, role: 'admin' as UserRole };
+    const entry = await getPhoneIndex(normalized);
+    if (!entry) return { exists: false };
+    return { exists: true, role: entry.role };
+  }, []);
 
-    const currentUid = firebaseUid;
-    if (!currentUid) return { ok: false, error: 'שגיאת חיבור — נסה שוב' };
+  const login = useCallback(async (phone: string, code: string) => {
+    const normalized = normalizePhone(phone);
 
-    let user: AppUser | null = null;
-
-    if (phoneEntry.uid === currentUid) {
-      // Same device — just load profile
-      user = await getUserByUid(currentUid);
-    } else {
-      // Different device — migrate to current uid
-      const oldUser = await getUserByUid(phoneEntry.uid);
-      if (!oldUser) return { ok: false, error: 'שגיאה בטעינת פרופיל' };
-      await migratePhoneToUid(phone.trim(), currentUid, oldUser);
-      user = { ...oldUser, id: currentUid, uid: currentUid };
+    // Admin login via env credentials
+    if (ADMIN_PHONE && normalized === normalizePhone(ADMIN_PHONE)) {
+      if (!ADMIN_CODE || code.trim() !== ADMIN_CODE) return { ok: false, error: 'קוד אדמין שגוי' };
+      if (!firebaseUid) return { ok: false, error: 'שגיאת חיבור — נסה שוב' };
+      let user = await getUserByUid(firebaseUid);
+      if (!user || user.role !== 'admin') user = await createAdminUser(firebaseUid, normalized);
+      persist(user);
+      return { ok: true };
     }
 
-    if (!user) return { ok: false, error: 'שגיאה בטעינת פרופיל' };
-    persist(user);
-    return { ok: true };
-  }, [firebaseUid, persist]);
-
-  const loginAsChild = useCallback(async (phone: string, code: string) => {
-    const phoneEntry = await getPhoneIndex(phone.trim());
-    if (!phoneEntry) return { ok: false, error: 'לא נמצא ילד עם מספר זה' };
-    if (phoneEntry.role !== 'child') return { ok: false, error: 'מספר זה רשום כהורה, לא כילד' };
+    const phoneEntry = await getPhoneIndex(normalized);
+    if (!phoneEntry) return { ok: false, error: 'לא נמצא חשבון עם מספר זה' };
     if (phoneEntry.accessCode !== code.trim()) return { ok: false, error: 'קוד שגוי' };
 
     const currentUid = firebaseUid;
@@ -133,7 +127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } else {
       const oldUser = await getUserByUid(phoneEntry.uid);
       if (!oldUser) return { ok: false, error: 'שגיאה בטעינת פרופיל' };
-      await migratePhoneToUid(phone.trim(), currentUid, oldUser);
+      await migratePhoneToUid(normalized, currentUid, oldUser as Parent | Child);
       user = { ...oldUser, id: currentUid, uid: currentUid };
     }
 
@@ -147,13 +141,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     lastName: string;
     phone: string;
     accessCode: string;
-    parentCode: string;
   }) => {
-    if (data.parentCode !== PARENT_CODE) {
-      return { ok: false, error: 'קוד הורים שגוי. פנה למארגנים לקבל את הקוד.' };
-    }
-
-    const existing = await getPhoneIndex(data.phone.trim());
+    const normalized = normalizePhone(data.phone);
+    const existing = await getPhoneIndex(normalized);
     if (existing) return { ok: false, error: 'כבר קיים חשבון עם מספר זה' };
 
     if (!firebaseUid) return { ok: false, error: 'שגיאת חיבור — נסה שוב' };
@@ -162,9 +152,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       role: 'parent',
       firstName: data.firstName.trim(),
       lastName: data.lastName.trim(),
-      phone: data.phone.trim(),
+      phone: normalized,
       accessCode: data.accessCode.trim(),
-      familyId: data.phone.trim(),
+      familyId: normalized,
     });
     persist(user);
     return { ok: true };
@@ -180,7 +170,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return { ok: false, error: 'רק הורה יכול להוסיף ילד' };
     }
 
-    const existing = await getPhoneIndex(data.phone.trim());
+    const normalized = normalizePhone(data.phone);
+    const existing = await getPhoneIndex(normalized);
     if (existing) return { ok: false, error: 'כבר קיים חשבון עם מספר זה' };
 
     // Children get their own unique ID (not the parent's UID)
@@ -189,11 +180,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       role: 'child',
       firstName: data.firstName.trim(),
       lastName: (currentUser as Parent).lastName,
-      phone: data.phone.trim(),
+      phone: normalized,
       accessCode: data.accessCode.trim(),
       familyId: currentUser.familyId,
       createdByParentId: currentUser.id,
-    } as Omit<AppUser, 'id' | 'uid' | 'createdAt'>);
+    } as Omit<Child, 'id' | 'uid' | 'createdAt'>);
 
     return { ok: true };
   }, [currentUser]);
@@ -209,6 +200,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const isParent = currentUser?.role === 'parent';
   const isChild = currentUser?.role === 'child';
+  const isAdmin = currentUser?.role === 'admin';
 
   // Expose getChildrenByParent for FamilyScreen
   void getChildrenByParent;
@@ -216,9 +208,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={{
       currentUser, firebaseUid, loading,
-      loginAsParent, loginAsChild,
+      checkPhone, login,
       registerParent, addChild, logout,
-      isParent, isChild,
+      isParent, isChild, isAdmin,
     }}>
       {children}
     </AuthContext.Provider>

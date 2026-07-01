@@ -48,8 +48,9 @@ VITE_FIREBASE_STORAGE_BUCKET=...
 VITE_FIREBASE_MESSAGING_SENDER_ID=...
 VITE_FIREBASE_APP_ID=...
 
-# שנה לקוד שתרצה — שתף רק עם הורים
-VITE_PARENT_CODE=horim2026
+# מנהל המערכת
+VITE_ADMIN_PHONE=05X-XXXXXXX
+VITE_ADMIN_CODE=קוד-שתבחר
 ```
 
 > ⚠️ **לעולם אל תכניס `.env.local` ל-Git!** הוא ב-`.gitignore`.
@@ -71,7 +72,16 @@ VITE_PARENT_CODE=horim2026
 | `VITE_FIREBASE_STORAGE_BUCKET` | Firebase Storage Bucket |
 | `VITE_FIREBASE_MESSAGING_SENDER_ID` | Firebase Messaging Sender ID |
 | `VITE_FIREBASE_APP_ID` | Firebase App ID |
-| `VITE_PARENT_CODE` | קוד סודי לרישום הורים (לא API) |
+| `VITE_ADMIN_PHONE` | מספר טלפון של מנהל המערכת |
+| `VITE_ADMIN_CODE` | קוד כניסה של מנהל המערכת |
+
+## כניסה למערכת
+
+- **אורח** — רואה את הלוח ללא הרשמה
+- **הורה חדש** — מזין טלפון, שם, ובוחר קוד כניסה אישי
+- **הורה חוזר** — טלפון + קוד אישי שבחר בהרשמה
+- **ילד** — נרשם ע"י הורה עם טלפון וקוד אישי; כניסה: טלפון + קוד
+- **אדמין** — כניסה עם `VITE_ADMIN_PHONE` + `VITE_ADMIN_CODE`
 
 ## ארכיטקטורה
 
@@ -85,8 +95,9 @@ VITE_PARENT_CODE=horim2026
 ## אבטחה
 
 - Firebase Anonymous Auth מגן על כל הנתונים
-- Firestore Rules מגבילים פעולות לפי תפקיד (הורה/ילד)
-- קוד הורים (`VITE_PARENT_CODE`) הוא מחסום UX — **לא** סוד ברמת Firebase
+- Firestore Rules מגבילים פעולות לפי תפקיד (הורה/ילד/אדמין)
+- אין קוד קבוצתי — כל משתמש בוחר קוד אישי בהרשמה
+- `accessCode` נשמר ב-`phoneIndex` בלבד, לא בפרופיל המשתמש
 - לא נשמרים secrets ב-Git
 - אין API בתשלום בשום מקום
 

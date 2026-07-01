@@ -13,11 +13,7 @@ export interface RealtimeData {
   loading: boolean;
 }
 
-/**
- * Central real-time subscription for the calendar view.
- * All three collections are kept in sync via onSnapshot.
- */
-export function useRealtimeData(): RealtimeData {
+export function useRealtimeData(isGuest: boolean): RealtimeData {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [allEscorts, setAllEscorts] = useState<ActivityEscort[]>([]);
   const [allRegistrations, setAllRegistrations] = useState<ActivityRegistration[]>([]);
@@ -25,10 +21,20 @@ export function useRealtimeData(): RealtimeData {
   const [loadedCount, setLoadedCount] = useState(0);
 
   useEffect(() => {
+    setLoadedCount(0);
+    setLoading(true);
+    if (isGuest) {
+      setAllEscorts([]);
+      setAllRegistrations([]);
+    }
+
     const unsub1 = subscribeToActivities((acts) => {
       setActivities(acts);
       setLoadedCount((c) => c + 1);
     });
+
+    if (isGuest) return unsub1;
+
     const unsub2 = subscribeToAllEscorts((escorts) => {
       setAllEscorts(escorts);
       setLoadedCount((c) => c + 1);
@@ -38,11 +44,11 @@ export function useRealtimeData(): RealtimeData {
       setLoadedCount((c) => c + 1);
     });
     return () => { unsub1(); unsub2(); unsub3(); };
-  }, []);
+  }, [isGuest]);
 
   useEffect(() => {
-    if (loadedCount >= 3) setLoading(false);
-  }, [loadedCount]);
+    if (loadedCount >= (isGuest ? 1 : 3)) setLoading(false);
+  }, [loadedCount, isGuest]);
 
   return { activities, allEscorts, allRegistrations, loading };
 }

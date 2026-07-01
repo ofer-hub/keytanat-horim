@@ -21,10 +21,17 @@ export function generatePrayerEvents(): PrayerEvent[] {
   const current = new Date(start);
   let idx = 0;
 
+  // Fast days — skip regular prayer schedule
+  const isFastDay = (d: Date) => {
+    const m = d.getMonth() + 1;
+    const day = d.getDate();
+    return (m === 7 && day === 2) || (m === 7 && day === 23); // 17 Tammuz & 9 Av 5786
+  };
+
   while (current <= end) {
     const dow = current.getDay(); // 0=Sun, 5=Fri, 6=Sat
 
-    if (dow !== 5 && dow !== 6) {
+    if (dow !== 5 && dow !== 6 && !isFastDay(current)) {
       // שחרית + שיעור — every day except Fri/Sat
       const shachStart = dateStr(current, 8, 15);
       events.push({
@@ -79,6 +86,26 @@ export function generatePrayerEvents(): PrayerEvent[] {
 
     current.setDate(current.getDate() + 1);
   }
+
+  // Fast days — all-day banner events
+  events.push({
+    id: 'fast-17tammuz',
+    title: 'צום י״ז בתמוז',
+    start: '2026-07-02',
+    end: '2026-07-03',
+    location: '',
+    type: 'prayer',
+    extendedProps: { isPrayer: true, location: '', isFastDay: true },
+  });
+  events.push({
+    id: 'fast-9av',
+    title: 'צום ט׳ באב',
+    start: '2026-07-23',
+    end: '2026-07-24',
+    location: '',
+    type: 'prayer',
+    extendedProps: { isPrayer: true, location: '', isFastDay: true },
+  });
 
   return events;
 }

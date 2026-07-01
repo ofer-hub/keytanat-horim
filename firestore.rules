@@ -3,15 +3,17 @@ rules_version = '2';
 // ─────────────────────────────────────────────────────────────────
 // קייטנת הורים אריאל — Firestore Security Rules
 //
-// כל גישה דורשת Firebase Anonymous Auth.
-// תפקידים נשמרים ב-users/{uid}.data.role
+// activities:  ציבורי לקריאה בלבד (אין מידע רגיש).
+// שאר הcollections: דורשים משתמש רשום עם פרופיל תקין.
+// admin: גישה מלאה לכל הcollections.
 // ─────────────────────────────────────────────────────────────────
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions
-    function isAuth() {
+    // ── Helpers ──────────────────────────────────────────────────
+
+    function isSignedIn() {
       return request.auth != null;
     }
 
@@ -19,79 +21,100 @@ service cloud.firestore {
       return request.auth.uid;
     }
 
-    function myRole() {
-      return get(/databases/$(database)/documents/users/$(myUid())).data.role;
+    // exists() is cheaper than get() and sufficient for profile check
+    function hasUserProfile() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(myUid()));
     }
 
-    function isParent() {
-      return isAuth() && myRole() == 'parent';
+    function myUser() {
+      return get(/databases/$(database)/documents/users/$(myUid())).data;
     }
 
-    function isChild() {
-      return isAuth() && myRole() == 'child';
+    function isAdmin() {
+      return hasUserProfile() && myUser().role == 'admin';
+    }
+
+    function isRegisteredParent() {
+      return hasUserProfile() && myUser().role == 'parent';
+    }
+
+    function isRegisteredChild() {
+      return hasUserProfile() && myUser().role == 'child';
+    }
+
+    function isRegisteredUser() {
+      return isRegisteredParent() || isRegisteredChild() || isAdmin();
     }
 
     // ── users/{uid} ──────────────────────────────────────────────
-    // כל משתמש מחובר יכול לקרוא פרופילים (צורך לצגת שמות).
-    // כתיבה: רק לעצמך, או הורה שמוסיף ילד.
     match /users/{uid} {
-      allow read: if isAuth();
-      allow create: if isAuth() && (
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && (
         myUid() == uid ||
-        // הורה יוצר פרופיל לילד (childUid != parentUid)
-        isParent()
+        isRegisteredParent() ||
+        isAdmin()
       );
-      allow update: if isAuth() && (
-        myUid() == uid ||
-        // מיגרציה cross-device: המשתמש עצמו (uid חדש) כותב פרופיל
-        true  // controlled by app logic; phone index ensures only real user can migrate
-      );
-      allow delete: if false;
+      allow update: if isAdmin()
+        || (isSignedIn() && myUid() == uid
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.uid == resource.data.uid
+          && request.resource.data.familyId == resource.data.familyId);
+      allow delete: if isAdmin();
     }
 
     // ── phoneIndex/{phone} ───────────────────────────────────────
-    // אינדקס טלפון לצורך כניסה cross-device.
-    // קריאה: כל מחובר (צורך לkניסה)
-    // כתיבה: כל מחובר (הרישום)
     match /phoneIndex/{phone} {
-      allow read: if isAuth();
-      allow write: if isAuth();
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && (
+        request.resource.data.uid == myUid() ||
+        isRegisteredParent() ||
+        isAdmin()
+      );
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
     }
 
     // ── activities/{activityId} ──────────────────────────────────
-    // קריאה: כל מחובר
-    // יצירה: הורים בלבד
-    // עדכון/מחיקה: רק יוצר הפעילות
     match /activities/{activityId} {
-      allow read: if isAuth();
-      allow create: if isParent();
-      allow update: if isParent() && myUid() == resource.data.createdByParentId;
-      allow delete: if isParent() && myUid() == resource.data.createdByParentId;
+      allow read: if true;
+
+      allow create: if isRegisteredParent() || isAdmin();
+
+      allow update: if isAdmin()
+        || (isRegisteredParent() && myUid() == resource.data.createdByParentId)
+        || (isRegisteredChild()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['childCount'])
+            && request.resource.data.childCount >= 0
+            && (request.resource.data.childCount == resource.data.get('childCount', 0) + 1
+                || request.resource.data.childCount == resource.data.get('childCount', 0) - 1))
+        || (isRegisteredParent()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seatCount'])
+            && request.resource.data.seatCount >= 0);
+
+      allow delete: if isAdmin()
+        || (isRegisteredParent() && myUid() == resource.data.createdByParentId);
     }
 
     // ── activityEscorts/{escortId} ───────────────────────────────
-    // קריאה: כל מחובר
-    // יצירה: הורים בלבד
-    // מחיקה: רק ההורה עצמו (ולא אם isCreator)
     match /activityEscorts/{escortId} {
-      allow read: if isAuth();
-      allow create: if isParent();
-      allow update: if isParent() && myUid() == resource.data.parentId;
-      allow delete: if isParent()
-                    && myUid() == resource.data.parentId
-                    && resource.data.isCreator == false;
+      allow read: if isRegisteredUser();
+      allow create: if isRegisteredParent() || isAdmin();
+      allow update: if isAdmin()
+        || (isRegisteredParent() && myUid() == resource.data.parentId);
+      allow delete: if isAdmin()
+        || (isRegisteredParent()
+            && myUid() == resource.data.parentId
+            && resource.data.isCreator == false);
     }
 
     // ── activityRegistrations/{regId} ────────────────────────────
-    // קריאה: כל מחובר
-    // יצירה: ילד — רק עבור עצמו
-    // מחיקה: ילד — רק שלו עצמו
     match /activityRegistrations/{regId} {
-      allow read: if isAuth();
-      allow create: if isAuth()
-                    && isChild()
-                    && request.resource.data.childId == myUid();
-      allow delete: if isAuth() && myUid() == resource.data.childId;
+      allow read: if isRegisteredUser();
+      allow create: if isAdmin()
+        || (isRegisteredChild() && request.resource.data.childId == myUid());
+      allow delete: if isAdmin()
+        || (isRegisteredChild() && myUid() == resource.data.childId);
     }
   }
 }

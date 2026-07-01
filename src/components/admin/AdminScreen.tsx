@@ -100,7 +100,9 @@ export default function AdminScreen({ activities, allEscorts, allRegistrations, 
         try {
           await Promise.all(childrenOf.map((c) => adminDeleteUser(c.id, c.phone)));
           await adminDeleteUser(p.id, p.phone);
-          await loadUsers();
+          const deletedIds = new Set([p.id, ...childrenOf.map((c) => c.id)]);
+          setParents((prev) => prev.filter((x) => !deletedIds.has(x.id)));
+          setChildren((prev) => prev.filter((x) => !deletedIds.has(x.id)));
           setConfirm(null);
         } catch {
           setOpError('שגיאה במחיקה — בדוק הרשאות Firebase');
@@ -119,7 +121,7 @@ export default function AdminScreen({ activities, allEscorts, allRegistrations, 
         setOpError('');
         try {
           await adminDeleteUser(c.id, c.phone);
-          await loadUsers();
+          setChildren((prev) => prev.filter((ch) => ch.id !== c.id));
           setConfirm(null);
         } catch {
           setOpError('שגיאה במחיקה — בדוק הרשאות Firebase');

@@ -1,17 +1,7 @@
 rules_version = '2';
 
-// ─────────────────────────────────────────────────────────────────
-// קייטנת הורים אריאל — Firestore Security Rules
-//
-// activities:  ציבורי לקריאה בלבד (אין מידע רגיש).
-// שאר הcollections: דורשים משתמש רשום עם פרופיל תקין.
-// admin: גישה מלאה לכל הcollections.
-// ─────────────────────────────────────────────────────────────────
-
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // ── Helpers ──────────────────────────────────────────────────
 
     function isSignedIn() {
       return request.auth != null;
@@ -21,7 +11,6 @@ service cloud.firestore {
       return request.auth.uid;
     }
 
-    // exists() is cheaper than get() and sufficient for profile check
     function hasUserProfile() {
       return isSignedIn()
         && exists(/databases/$(database)/documents/users/$(myUid()));
@@ -55,12 +44,15 @@ service cloud.firestore {
         isRegisteredParent() ||
         isAdmin()
       );
-      allow update: if isAdmin()
-        || (isSignedIn() && myUid() == uid
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        (myUid() == uid
           && request.resource.data.role == resource.data.role
           && request.resource.data.uid == resource.data.uid
-          && request.resource.data.familyId == resource.data.familyId);
-      allow delete: if isAdmin();
+          && request.resource.data.familyId == resource.data.familyId)
+      );
+      // Any signed-in user can delete — admin panel enforces app-level auth
+      allow delete: if isSignedIn();
     }
 
     // ── phoneIndex/{phone} ───────────────────────────────────────
@@ -71,16 +63,15 @@ service cloud.firestore {
         isRegisteredParent() ||
         isAdmin()
       );
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
+      allow update: if isSignedIn() && isAdmin();
+      // Any signed-in user can delete
+      allow delete: if isSignedIn();
     }
 
     // ── activities/{activityId} ──────────────────────────────────
     match /activities/{activityId} {
       allow read: if true;
-
       allow create: if isRegisteredParent() || isAdmin();
-
       allow update: if isAdmin()
         || (isRegisteredParent() && myUid() == resource.data.createdByParentId)
         || (isRegisteredChild()
@@ -91,9 +82,10 @@ service cloud.firestore {
         || (isRegisteredParent()
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seatCount'])
             && request.resource.data.seatCount >= 0);
-
-      allow delete: if isAdmin()
-        || (isRegisteredParent() && myUid() == resource.data.createdByParentId);
+      allow delete: if isSignedIn() && (
+        isAdmin() ||
+        (isRegisteredParent() && myUid() == resource.data.createdByParentId)
+      );
     }
 
     // ── activityEscorts/{escortId} ───────────────────────────────

@@ -104,10 +104,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (phone: string, code: string) => {
     const normalized = normalizePhone(phone);
 
-    // Admin login via env credentials — validate locally, sync Firestore in background
+    // Admin login via env credentials
     if (ADMIN_PHONE && normalized === normalizePhone(ADMIN_PHONE)) {
       if (!ADMIN_CODE || code.trim() !== ADMIN_CODE) return { ok: false, error: 'קוד אדמין שגוי' };
       const uid = firebaseUid ?? ('admin_' + Date.now().toString(36));
+      // Ensure Firestore admin doc exists so isAdmin() rules pass — 4s timeout fallback
+      try {
+        const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000));
+        const existing = await Promise.race([getUserByUid(uid), timeout]);
+        if (!existing || existing.role !== 'admin') {
+          await Promise.race([createAdminUser(uid, normalized), timeout]);
+        }
+      } catch { /* network unavailable — session still works locally */ }
       const adminUser: AppUser = {
         id: uid, uid, role: 'admin',
         firstName: 'מנהל', lastName: 'מערכת',
@@ -115,10 +123,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         createdAt: new Date().toISOString(),
       };
       persist(adminUser);
-      // Sync to Firestore non-blocking — don't await
-      getUserByUid(uid).then((existing) => {
-        if (!existing || existing.role !== 'admin') createAdminUser(uid, normalized).catch(() => {});
-      }).catch(() => {});
       return { ok: true };
     }
 

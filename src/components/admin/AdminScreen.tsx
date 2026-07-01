@@ -30,15 +30,22 @@ export default function AdminScreen({ activities, allEscorts, allRegistrations, 
   const [editActivity, setEditActivity] = useState<Activity | null>(null);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
 
+  const [opError, setOpError] = useState('');
+
   const loadUsers = useCallback(async () => {
     setLoadingUsers(true);
-    const [ps, cs] = await Promise.all([
-      getUsersByRole('parent'),
-      getUsersByRole('child'),
-    ]);
-    setParents(ps as Parent[]);
-    setChildren(cs as Child[]);
-    setLoadingUsers(false);
+    try {
+      const [ps, cs] = await Promise.all([
+        getUsersByRole('parent'),
+        getUsersByRole('child'),
+      ]);
+      setParents(ps as Parent[]);
+      setChildren(cs as Child[]);
+    } catch {
+      setOpError('שגיאה בטעינת משתמשים');
+    } finally {
+      setLoadingUsers(false);
+    }
   }, []);
 
   useEffect(() => { loadUsers(); }, [loadUsers]);
@@ -51,10 +58,16 @@ export default function AdminScreen({ activities, allEscorts, allRegistrations, 
   const handleSaveUser = async () => {
     if (!editUser) return;
     setSaving(true);
-    await adminUpdateUser(editUser.id, editForm);
-    await loadUsers();
-    setEditUser(null);
-    setSaving(false);
+    setOpError('');
+    try {
+      await adminUpdateUser(editUser.id, editForm);
+      await loadUsers();
+      setEditUser(null);
+    } catch {
+      setOpError('שגיאה בשמירה — בדוק הרשאות Firebase');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const askDeleteActivity = (a: Activity) => {
@@ -62,9 +75,16 @@ export default function AdminScreen({ activities, allEscorts, allRegistrations, 
       label: `למחוק את הפעילות "${a.title}"?`,
       onConfirm: async () => {
         setSaving(true);
-        await deleteActivity(a.id);
-        setSaving(false);
-        setConfirm(null);
+        setOpError('');
+        try {
+          await deleteActivity(a.id);
+          setConfirm(null);
+        } catch {
+          setOpError('שגיאה במחיקה — בדוק הרשאות Firebase');
+          setSaving(false);
+        } finally {
+          setSaving(false);
+        }
       },
     });
   };
@@ -76,11 +96,17 @@ export default function AdminScreen({ activities, allEscorts, allRegistrations, 
       label: `למחוק את ${p.firstName} ${p.lastName}${extra}?`,
       onConfirm: async () => {
         setSaving(true);
-        await Promise.all(childrenOf.map((c) => adminDeleteUser(c.id, c.phone)));
-        await adminDeleteUser(p.id, p.phone);
-        await loadUsers();
-        setSaving(false);
-        setConfirm(null);
+        setOpError('');
+        try {
+          await Promise.all(childrenOf.map((c) => adminDeleteUser(c.id, c.phone)));
+          await adminDeleteUser(p.id, p.phone);
+          await loadUsers();
+          setConfirm(null);
+        } catch {
+          setOpError('שגיאה במחיקה — בדוק הרשאות Firebase');
+        } finally {
+          setSaving(false);
+        }
       },
     });
   };
@@ -90,10 +116,16 @@ export default function AdminScreen({ activities, allEscorts, allRegistrations, 
       label: `למחוק את ${c.firstName} ${c.lastName}?`,
       onConfirm: async () => {
         setSaving(true);
-        await adminDeleteUser(c.id, c.phone);
-        await loadUsers();
-        setSaving(false);
-        setConfirm(null);
+        setOpError('');
+        try {
+          await adminDeleteUser(c.id, c.phone);
+          await loadUsers();
+          setConfirm(null);
+        } catch {
+          setOpError('שגיאה במחיקה — בדוק הרשאות Firebase');
+        } finally {
+          setSaving(false);
+        }
       },
     });
   };
@@ -313,6 +345,7 @@ export default function AdminScreen({ activities, allEscorts, allRegistrations, 
           <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl text-center">
             <div className="text-4xl mb-3">⚠️</div>
             <p className="text-slate-800 font-semibold mb-5">{confirm.label}</p>
+            {opError && <p className="text-red-600 text-sm mb-3">{opError}</p>}
             <div className="flex gap-3">
               <button
                 onClick={() => setConfirm(null)}

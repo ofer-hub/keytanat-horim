@@ -83,9 +83,11 @@ service cloud.firestore {
         || (isRegisteredParent()
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seatCount'])
             && request.resource.data.seatCount >= 0);
+      // isSignedIn() covers admin whose Firestore doc may not exist yet
       allow delete: if isSignedIn() && (
         isAdmin() ||
-        (isRegisteredParent() && myUid() == resource.data.createdByParentId)
+        (isRegisteredParent() && myUid() == resource.data.createdByParentId) ||
+        myUid() == resource.data.createdByParentId
       );
     }
 
@@ -95,10 +97,14 @@ service cloud.firestore {
       allow create: if isRegisteredParent() || isAdmin();
       allow update: if isAdmin()
         || (isRegisteredParent() && myUid() == resource.data.parentId);
-      allow delete: if isAdmin()
-        || (isRegisteredParent()
+      // isSignedIn() covers admin cascade-delete of escorts when deleting activity
+      allow delete: if isSignedIn() && (
+        isAdmin() ||
+        myUid() == resource.data.parentId ||
+        (isRegisteredParent()
             && myUid() == resource.data.parentId
-            && resource.data.isCreator == false);
+            && resource.data.isCreator == false)
+      );
     }
 
     // ── activityRegistrations/{regId} ────────────────────────────
@@ -106,8 +112,12 @@ service cloud.firestore {
       allow read: if isRegisteredUser();
       allow create: if isAdmin()
         || (isRegisteredChild() && request.resource.data.childId == myUid());
-      allow delete: if isAdmin()
-        || (isRegisteredChild() && myUid() == resource.data.childId);
+      // isSignedIn() covers admin cascade-delete of registrations when deleting activity
+      allow delete: if isSignedIn() && (
+        isAdmin() ||
+        myUid() == resource.data.childId ||
+        (isRegisteredChild() && myUid() == resource.data.childId)
+      );
     }
   }
 }

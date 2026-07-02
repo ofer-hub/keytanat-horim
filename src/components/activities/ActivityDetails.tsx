@@ -129,7 +129,6 @@ export default function ActivityDetails({ activity, onClose, onEdit, onDelete, i
       }
     : calculateActivityCoverage(activity, escorts, registrations);
 
-  const isCreator = isParent && currentUser?.id === activity.createdByParentId;
   const myEscort = isParent ? escorts.find((e) => e.parentId === currentUser?.id) : undefined;
   const myReg = isChild ? registrations.find((r) => r.childId === currentUser?.id) : undefined;
 

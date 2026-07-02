@@ -39,12 +39,19 @@ export default function AddChildScreen({ onBack, onGoToCalendar }: Props) {
     }
 
     setLoading(true);
-    const result = await addChild({
-      firstName: form.firstName,
-      lastName: currentUser?.lastName ?? '',
-      phone: form.phone,
-      accessCode: form.accessCode,
-    });
+    let result: { ok: boolean; error?: string };
+    try {
+      result = await addChild({
+        firstName: form.firstName,
+        lastName: currentUser?.lastName ?? '',
+        phone: form.phone,
+        accessCode: form.accessCode,
+      });
+    } catch {
+      setError('שגיאת חיבור — בדוק אינטרנט ונסה שוב');
+      setLoading(false);
+      return;
+    }
     setLoading(false);
 
     if (!result.ok) {

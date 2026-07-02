@@ -193,15 +193,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Children get their own unique ID (not the parent's UID)
     const childUid = 'child_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
-    await createUserProfile(childUid, {
-      role: 'child',
-      firstName: data.firstName.trim(),
-      lastName: (currentUser as Parent).lastName,
-      phone: normalized,
-      accessCode: data.accessCode.trim(),
-      familyId: currentUser.familyId,
-      createdByParentId: currentUser.id,
-    } as Omit<Child, 'id' | 'uid' | 'createdAt'>);
+    try {
+      await createUserProfile(childUid, {
+        role: 'child',
+        firstName: data.firstName.trim(),
+        lastName: (currentUser as Parent).lastName,
+        phone: normalized,
+        accessCode: data.accessCode.trim(),
+        familyId: currentUser.familyId,
+        createdByParentId: currentUser.id,
+      } as Omit<Child, 'id' | 'uid' | 'createdAt'>);
+    } catch {
+      return { ok: false, error: 'שגיאת חיבור — לא ניתן לשמור. בדוק אינטרנט ונסה שוב' };
+    }
 
     return { ok: true };
   }, [currentUser]);

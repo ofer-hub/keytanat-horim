@@ -108,7 +108,7 @@ function WhatsAppPanel({ activity, escorts, registrations }: {
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 export default function ActivityDetails({ activity, onClose, onEdit, onDelete, isGuest, onLoginClick }: Props) {
-  const { currentUser, isParent, isChild } = useAuth();
+  const { currentUser, isParent, isChild, isAdmin } = useAuth();
   // Hooks must be called unconditionally; for guests the data loads but isn't displayed
   const { escorts, loading: escortsLoading, joinEscort, leaveEscort } = useEscorts(activity.id);
   const { registrations, loading: regsLoading, register, unregister } = useRegistrations(activity.id);
@@ -397,8 +397,8 @@ export default function ActivityDetails({ activity, onClose, onEdit, onDelete, i
               <WhatsAppPanel activity={activity} escorts={escorts} registrations={registrations} />
             )}
 
-            {/* Edit — any parent; Delete — creator only */}
-            {isParent && (
+            {/* Edit — any parent or admin; Delete — creator or admin */}
+            {(isParent || isAdmin) && (
               <div className="flex gap-2 pt-2">
                 {onEdit && (
                   <button onClick={onEdit}
@@ -406,7 +406,7 @@ export default function ActivityDetails({ activity, onClose, onEdit, onDelete, i
                     ✏️ ערוך
                   </button>
                 )}
-                {isCreator && (
+                {(isCreator || isAdmin) && (
                   <button onClick={handleDelete}
                     className={`flex-1 py-2 rounded-xl font-semibold text-sm transition-colors ${
                       confirmDelete ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-red-100 text-red-700 hover:bg-red-200'

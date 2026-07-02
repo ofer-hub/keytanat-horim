@@ -108,12 +108,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (ADMIN_PHONE && normalized === normalizePhone(ADMIN_PHONE)) {
       if (!ADMIN_CODE || code.trim() !== ADMIN_CODE) return { ok: false, error: 'קוד אדמין שגוי' };
       const uid = firebaseUid ?? ('admin_' + Date.now().toString(36));
-      // Ensure Firestore admin doc exists so isAdmin() rules pass — 4s timeout fallback
+      // Ensure Firestore admin doc exists so Firestore rules pass
       try {
-        const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000));
-        const existing = await Promise.race([getUserByUid(uid), timeout]);
+        const existing = await Promise.race([
+          getUserByUid(uid),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000)),
+        ]);
         if (!existing || existing.role !== 'admin') {
-          await Promise.race([createAdminUser(uid, normalized), timeout]);
+          await Promise.race([
+            createAdminUser(uid, normalized),
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000)),
+          ]);
         }
       } catch { /* network unavailable — session still works locally */ }
       const adminUser: AppUser = {

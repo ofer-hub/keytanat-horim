@@ -71,7 +71,8 @@ service cloud.firestore {
     // ── activities/{activityId} ──────────────────────────────────
     match /activities/{activityId} {
       allow read: if true;
-      allow create: if isRegisteredParent() || isAdmin();
+      // isSignedIn() covers admin whose Firestore doc may not exist yet
+      allow create: if isSignedIn();
       allow update: if isAdmin()
         || (isRegisteredParent() && myUid() == resource.data.createdByParentId)
         || (isRegisteredChild()

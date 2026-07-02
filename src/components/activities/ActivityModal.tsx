@@ -43,6 +43,7 @@ export default function ActivityModal({
         location: editActivity.location,
         description: editActivity.description,
         seats: String(initialEscortSeats),
+        initiatorName: editActivity.createdByParentName,
       });
     }
   }, [editActivity, initialEscortSeats]);

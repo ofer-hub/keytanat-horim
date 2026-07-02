@@ -165,16 +165,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (!firebaseUid) return { ok: false, error: 'שגיאת חיבור — נסה שוב' };
 
-    const user = await createUserProfile(firebaseUid, {
-      role: 'parent',
-      firstName: data.firstName.trim(),
-      lastName: data.lastName.trim(),
-      phone: normalized,
-      accessCode: data.accessCode.trim(),
-      familyId: normalized,
-    });
-    persist(user);
-    return { ok: true };
+    try {
+      const user = await createUserProfile(firebaseUid, {
+        role: 'parent',
+        firstName: data.firstName.trim(),
+        lastName: data.lastName.trim(),
+        phone: normalized,
+        accessCode: data.accessCode.trim(),
+        familyId: normalized,
+      });
+      persist(user);
+      return { ok: true };
+    } catch {
+      return { ok: false, error: 'שגיאת חיבור — לא ניתן לשמור. בדוק אינטרנט ונסה שוב' };
+    }
   }, [firebaseUid, persist]);
 
   const addChild = useCallback(async (data: {
@@ -189,7 +193,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const normalized = normalizePhone(data.phone);
     const existing = await getPhoneIndex(normalized);
-    if (existing) return { ok: false, error: 'כבר קיים חשבון עם מספר זה' };
+    if (existing) {
+      // If this phone already belongs to a child of THIS parent, treat as success (idempotent retry)
+      const existingUser = await getUserByUid(existing.uid);
+      if (existingUser && (existingUser as Child).createdByParentId === currentUser.id) {
+        return { ok: true };
+      }
+      return { ok: false, error: 'מספר זה כבר רשום במערכת' };
+    }
 
     // Children get their own unique ID (not the parent's UID)
     const childUid = 'child_' + Math.random().toString(36).slice(2) + Date.now().toString(36);

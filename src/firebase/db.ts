@@ -1,6 +1,6 @@
 import {
   collection, doc, getDocs, getDoc, addDoc, setDoc, updateDoc, deleteDoc,
-  query, where, onSnapshot, serverTimestamp, Timestamp, increment,
+  query, where, onSnapshot, serverTimestamp, Timestamp, increment, writeBatch,
   type Unsubscribe,
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from './config';
@@ -74,12 +74,15 @@ export async function createUserProfile(
   if (isFirebaseConfigured) {
     // accessCode stays in phoneIndex only — never written to the users doc
     const { accessCode, ...profileData } = data as Record<string, unknown>;
-    await setDoc(doc(db, 'users', uid), { ...profileData, uid, createdAt: serverTimestamp() });
-    await setDoc(doc(db, 'phoneIndex', data.phone), {
+    // Use a batch so both writes are atomic — no partial-success state
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'users', uid), { ...profileData, uid, createdAt: serverTimestamp() });
+    batch.set(doc(db, 'phoneIndex', data.phone), {
       uid,
       accessCode: accessCode ?? '',
       role: data.role,
     });
+    await batch.commit();
     // Return includes accessCode so it can be stored in the localStorage session
     return { id: uid, uid, ...data, createdAt: now } as Parent | Child;
   }

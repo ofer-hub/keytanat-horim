@@ -174,7 +174,8 @@ export default function AdminScreen({ activities, allEscorts, allRegistrations, 
                 const regs = allRegistrations.filter((r) => r.activityId === a.id);
                 const escorts = allEscorts.filter((e) => e.activityId === a.id);
                 return (
-                  <div key={a.id} className="bg-white rounded-xl p-4 shadow-sm">
+                  <div key={a.id} className="bg-white rounded-xl p-4 shadow-sm space-y-3">
+                    {/* Header row */}
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="font-bold text-slate-800 truncate">{a.title}</div>
@@ -184,7 +185,7 @@ export default function AdminScreen({ activities, allEscorts, allRegistrations, 
                           {a.location ? ` · ${a.location}` : ''}
                         </div>
                         <div className="text-xs text-slate-400 mt-0.5">
-                          יוצר: {a.createdByParentName} · {regs.length} ילדים · {escorts.length} מלווים
+                          יוצר: {a.createdByParentName}
                         </div>
                       </div>
                       <div className="flex gap-2 flex-shrink-0">
@@ -201,6 +202,43 @@ export default function AdminScreen({ activities, allEscorts, allRegistrations, 
                           🗑️ מחק
                         </button>
                       </div>
+                    </div>
+
+                    {/* Escorts */}
+                    <div className="bg-blue-50 rounded-lg p-3">
+                      <div className="text-xs font-bold text-blue-700 mb-1">
+                        🚗 הורים מלווים ({escorts.length})
+                      </div>
+                      {escorts.length === 0 ? (
+                        <div className="text-xs text-slate-400">אין עדיין</div>
+                      ) : (
+                        <div className="space-y-0.5">
+                          {escorts.map((e) => (
+                            <div key={e.id} className="text-xs text-slate-700 flex justify-between">
+                              <span>{e.parentName}{e.isCreator ? ' ⭐' : ''}</span>
+                              <span className="text-slate-500">{e.seats} מקומות</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Registrations */}
+                    <div className="bg-emerald-50 rounded-lg p-3">
+                      <div className="text-xs font-bold text-emerald-700 mb-1">
+                        👦 ילדים רשומים ({regs.length})
+                      </div>
+                      {regs.length === 0 ? (
+                        <div className="text-xs text-slate-400">אין עדיין</div>
+                      ) : (
+                        <div className="flex flex-wrap gap-1">
+                          {regs.map((r) => (
+                            <span key={r.id} className="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
+                              {r.childName}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 );

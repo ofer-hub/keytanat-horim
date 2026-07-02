@@ -122,14 +122,17 @@ function AppInner() {
     seats: number
   ) => {
     const activity = await createActivity(data);
-    await addEscort({
-      activityId: activity.id,
-      parentId: data.createdByParentId,
-      parentName: data.createdByParentName,
-      phone: currentUser?.phone ?? '',
-      seats,
-      isCreator: true,
-    });
+    // Admin creates activity without an auto-escort entry — parents join separately
+    if (currentUser?.role !== 'admin') {
+      await addEscort({
+        activityId: activity.id,
+        parentId: data.createdByParentId,
+        parentName: data.createdByParentName,
+        phone: currentUser?.phone ?? '',
+        seats,
+        isCreator: true,
+      });
+    }
     return activity;
   }, [createActivity, currentUser]);
 
@@ -201,8 +204,8 @@ function AppInner() {
         </div>
       )}
 
-      {/* Create activity button (parents only) */}
-      {!isGuest && isParent && screen === 'calendar' && (
+      {/* Create activity button (parents + admin) */}
+      {!isGuest && (isParent || isAdmin) && screen === 'calendar' && (
         <div className="px-4 pt-3 flex justify-end">
           <button
             onClick={() => { setSelectedDate(dayViewDate); setShowCreateModal(true); }}

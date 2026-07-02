@@ -17,7 +17,7 @@ interface Props {
 export default function ActivityModal({
   onClose, onSave, initialDate, editActivity, initialEscortSeats = 4, onEscortSeatsChange,
 }: Props) {
-  const { currentUser } = useAuth();
+  const { currentUser, isAdmin } = useAuth();
   const [form, setForm] = useState({
     title: '',
     date: initialDate ? format(initialDate, 'yyyy-MM-dd') : '2026-07-01',
@@ -26,6 +26,7 @@ export default function ActivityModal({
     location: '',
     description: '',
     seats: String(initialEscortSeats),
+    initiatorName: '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -52,9 +53,8 @@ export default function ActivityModal({
     e.preventDefault();
     setError('');
 
-    // Guards — should never pass due to UI hiding the button, but added for safety
-    if (!currentUser || currentUser.role !== 'parent') {
-      setError('רק הורה יכול ליצור פעילות');
+    if (!currentUser || (currentUser.role !== 'parent' && currentUser.role !== 'admin')) {
+      setError('אין הרשאה ליצור פעילות');
       return;
     }
 
@@ -78,14 +78,17 @@ export default function ActivityModal({
 
     setLoading(true);
     try {
-      const activityData: Omit<Activity, 'id' | 'createdAt' | 'updatedAt'> = {
+      const creatorName = isAdmin && form.initiatorName.trim()
+        ? form.initiatorName.trim()
+        : `${currentUser.firstName} ${currentUser.lastName}`;
+    const activityData: Omit<Activity, 'id' | 'createdAt' | 'updatedAt'> = {
         title: form.title.trim(),
         startDateTime,
         endDateTime,
         location: form.location.trim(),
         description: form.description.trim(),
         createdByParentId: currentUser.id,
-        createdByParentName: `${currentUser.firstName} ${currentUser.lastName}`,
+        createdByParentName: creatorName,
         type: 'activity',
         eveningReminderMarkedSent: false,
         halfHourReminderMarkedSent: false,
@@ -151,21 +154,23 @@ export default function ActivityModal({
           />
         </div>
 
-        <div>
-          <label className="form-label">מקומות פנויים ברכב שלך *</label>
-          <input
-            type="number"
-            className="form-input"
-            value={form.seats}
-            onChange={(e) => set('seats', e.target.value)}
-            required
-            min="0"
-            max="20"
-            step="1"
-            dir="ltr"
-          />
-          <p className="text-xs text-slate-400 mt-1">מקומות לילדים בלבד, לא כולל הנהג</p>
-        </div>
+        {!isAdmin && (
+          <div>
+            <label className="form-label">מקומות פנויים ברכב שלך *</label>
+            <input
+              type="number"
+              className="form-input"
+              value={form.seats}
+              onChange={(e) => set('seats', e.target.value)}
+              required={!isAdmin}
+              min="0"
+              max="20"
+              step="1"
+              dir="ltr"
+            />
+            <p className="text-xs text-slate-400 mt-1">מקומות לילדים בלבד, לא כולל הנהג</p>
+          </div>
+        )}
 
         <div>
           <label className="form-label">פרטים נוספים</label>
@@ -178,12 +183,25 @@ export default function ActivityModal({
           />
         </div>
 
-        <div className="bg-blue-50 rounded-xl p-3 text-sm text-blue-700">
-          <span className="font-semibold">הורה יוזם: </span>
-          {currentUser?.firstName} {currentUser?.lastName}
-          <br />
-          <span className="text-xs text-blue-500">תהיה אוטומטית הורה מלווה ראשון בפעילות זו</span>
-        </div>
+        {isAdmin ? (
+          <div>
+            <label className="form-label">הורה יוזם (רשות)</label>
+            <input
+              className="form-input"
+              value={form.initiatorName}
+              onChange={(e) => set('initiatorName', e.target.value)}
+              placeholder="שם ההורה שיזם את הפעילות"
+            />
+            <p className="text-xs text-slate-400 mt-1">אם ריק — יופיע "מנהל קייטנה". הורים יצטרפו כמלווים בנפרד.</p>
+          </div>
+        ) : (
+          <div className="bg-blue-50 rounded-xl p-3 text-sm text-blue-700">
+            <span className="font-semibold">הורה יוזם: </span>
+            {currentUser?.firstName} {currentUser?.lastName}
+            <br />
+            <span className="text-xs text-blue-500">תהיה אוטומטית הורה מלווה ראשון בפעילות זו</span>
+          </div>
+        )}
 
         {error && (
           <div className="bg-red-50 border border-red-300 text-red-700 rounded-lg p-3 text-sm font-medium">

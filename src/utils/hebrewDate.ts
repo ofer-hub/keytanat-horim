@@ -18,15 +18,18 @@ const HEBREW_MONTHS: Record<number, string> = {
 
 const ONES = ['', 'א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ז', 'ח', 'ט'];
 const TENS = ['', 'י', 'כ', 'ל', 'מ', 'נ', 'ס', 'ע', 'פ', 'צ'];
+const HUNDREDS = ['', 'ק', 'ר', 'ש', 'ת', 'תק', 'תר', 'תש', 'תת', 'תתק'];
 
 function numToGematria(n: number): string {
   if (n === 15) return 'ט״ו';
   if (n === 16) return 'ט״ז';
 
   let result = '';
-  const tens = Math.floor(n / 10);
+  const hundreds = Math.floor(n / 100);
+  const tens = Math.floor((n % 100) / 10);
   const ones = n % 10;
 
+  if (hundreds > 0) result += HUNDREDS[hundreds];
   if (tens > 0) result += TENS[tens];
   if (ones > 0) result += ONES[ones];
 

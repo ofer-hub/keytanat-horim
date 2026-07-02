@@ -210,7 +210,7 @@ const CalendarView = forwardRef<CalendarViewHandle, Props>(function CalendarView
         dateClick={handleDateClick}
         dayCellContent={(arg) => <HebrewDayCell date={arg.date} />}
         eventContent={(info) => <EventContent info={info} />}
-        dayMaxEvents={3}
+        dayMaxEvents={true}
         nowIndicator
         buttonText={{
           today: 'היום',

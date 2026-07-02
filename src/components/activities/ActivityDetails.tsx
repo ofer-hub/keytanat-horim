@@ -1,9 +1,9 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
 import Modal from '../common/Modal';
 import EscortJoinModal from './EscortJoinModal';
-import type { Activity, ActivityEscort, ActivityRegistration } from '../../types';
+import type { Activity, ActivityEscort, ActivityRegistration, Child } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { useEscorts } from '../../hooks/useEscorts';
 import { useRegistrations } from '../../hooks/useRegistrations';
@@ -11,6 +11,7 @@ import { calculateActivityCoverage } from '../../utils/coverage';
 import { downloadICS } from '../../utils/icsGenerator';
 import { buildWhatsAppMessage } from '../../utils/whatsapp';
 import { toHebrewDateFull } from '../../utils/hebrewDate';
+import { getChildrenByParent } from '../../firebase/db';
 
 interface Props {
   activity: Activity;
@@ -118,6 +119,13 @@ export default function ActivityDetails({ activity, onClose, onEdit, onDelete, i
   const [msg, setMsg] = useState('');
   const [msgType, setMsgType] = useState<'success' | 'error'>('success');
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [myChildren, setMyChildren] = useState<Child[]>([]);
+
+  useEffect(() => {
+    if (isParent && currentUser) {
+      getChildrenByParent(currentUser.id).then(setMyChildren).catch(() => {});
+    }
+  }, [isParent, currentUser]);
 
   const loading = escortsLoading || regsLoading;
   const coverage = isGuest
@@ -160,6 +168,30 @@ export default function ActivityDetails({ activity, onClose, onEdit, onDelete, i
     }
     setActionLoading(false);
   }, [currentUser, isChild, myReg, register, unregister, activity.id]);
+
+  const handleRegisterChild = useCallback(async (child: Child) => {
+    if (!currentUser || !isParent) return;
+    setActionLoading(true);
+    try {
+      const existing = registrations.find((r) => r.childId === child.id);
+      if (existing) {
+        await unregister(existing.id);
+        showMsg(`${child.firstName} הוסר/ה מהפעילות`);
+      } else {
+        await register({
+          activityId: activity.id,
+          childId: child.id,
+          childName: `${child.firstName} ${child.lastName}`,
+          familyId: child.familyId,
+          registeredByUserId: currentUser.id,
+        });
+        showMsg(`${child.firstName} נרשם/ה לפעילות! ✓`);
+      }
+    } catch (err: unknown) {
+      showMsg(err instanceof Error ? err.message : 'שגיאה', 'error');
+    }
+    setActionLoading(false);
+  }, [currentUser, isParent, registrations, register, unregister, activity.id]);
 
   const handleJoinEscort = useCallback(async (seats: number) => {
     if (!currentUser || !isParent) throw new Error('רק הורה יכול להצטרף');
@@ -373,6 +405,30 @@ export default function ActivityDetails({ activity, onClose, onEdit, onDelete, i
                 }`}>
                 🚗 {coverage.needsAdditionalEscort ? 'הצטרף/י כהורה מלווה (דרוש!)' : 'הצטרף/י כהורה מלווה'}
               </button>
+            )}
+
+            {/* Parent: register their children */}
+            {isParent && myChildren.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs text-slate-500 font-semibold">רישום ילדים לפעילות:</p>
+                {myChildren.map((child) => {
+                  const reg = registrations.find((r) => r.childId === child.id);
+                  return (
+                    <button
+                      key={child.id}
+                      onClick={() => handleRegisterChild(child)}
+                      disabled={actionLoading}
+                      className={`w-full py-2.5 rounded-xl font-bold text-sm transition-colors disabled:opacity-50 ${
+                        reg
+                          ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                          : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                      }`}
+                    >
+                      {reg ? `❌ בטל רישום ${child.firstName}` : `✅ רשום את ${child.firstName}`}
+                    </button>
+                  );
+                })}
+              </div>
             )}
 
             {/* Parent: leave escort (not creator) */}

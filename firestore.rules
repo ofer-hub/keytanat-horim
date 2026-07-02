@@ -104,13 +104,15 @@ service cloud.firestore {
     // ── activityRegistrations/{regId} ────────────────────────────
     match /activityRegistrations/{regId} {
       allow read: if isRegisteredUser();
+      // Parents can register their children; children register themselves
       allow create: if isAdmin()
+        || isRegisteredParent()
         || (isRegisteredChild() && request.resource.data.childId == myUid());
-      // isSignedIn() covers admin cascade-delete of registrations when deleting activity
+      // Parents can unregister their children; children unregister themselves
       allow delete: if isSignedIn() && (
         isAdmin() ||
-        myUid() == resource.data.childId ||
-        (isRegisteredChild() && myUid() == resource.data.childId)
+        isRegisteredParent() ||
+        myUid() == resource.data.childId
       );
     }
   }

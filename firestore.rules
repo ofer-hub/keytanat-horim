@@ -81,12 +81,8 @@ service cloud.firestore {
             && request.resource.data.childCount >= 0
             && (request.resource.data.childCount == resource.data.get('childCount', 0) + 1
                 || request.resource.data.childCount == resource.data.get('childCount', 0) - 1));
-      // isSignedIn() covers admin whose Firestore doc may not exist yet
-      allow delete: if isSignedIn() && (
-        isAdmin() ||
-        (isRegisteredParent() && myUid() == resource.data.createdByParentId) ||
-        myUid() == resource.data.createdByParentId
-      );
+      // Any signed-in user (parent or admin) can delete any activity
+      allow delete: if isSignedIn();
     }
 
     // ── activityEscorts/{escortId} ───────────────────────────────

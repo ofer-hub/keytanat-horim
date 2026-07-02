@@ -406,7 +406,7 @@ export default function ActivityDetails({ activity, onClose, onEdit, onDelete, i
                     ✏️ ערוך
                   </button>
                 )}
-                {(isCreator || isAdmin) && (
+                {onDelete && (
                   <button onClick={handleDelete}
                     className={`flex-1 py-2 rounded-xl font-semibold text-sm transition-colors ${
                       confirmDelete ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-red-100 text-red-700 hover:bg-red-200'

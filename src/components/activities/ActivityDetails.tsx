@@ -397,19 +397,23 @@ export default function ActivityDetails({ activity, onClose, onEdit, onDelete, i
               <WhatsAppPanel activity={activity} escorts={escorts} registrations={registrations} />
             )}
 
-            {/* Edit / Delete — creator only */}
-            {isCreator && (
+            {/* Edit — any parent; Delete — creator only */}
+            {isParent && (
               <div className="flex gap-2 pt-2">
-                <button onClick={onEdit}
-                  className="flex-1 py-2 rounded-xl bg-amber-100 text-amber-800 font-semibold hover:bg-amber-200 text-sm">
-                  ✏️ ערוך
-                </button>
-                <button onClick={handleDelete}
-                  className={`flex-1 py-2 rounded-xl font-semibold text-sm transition-colors ${
-                    confirmDelete ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-red-100 text-red-700 hover:bg-red-200'
-                  }`}>
-                  {confirmDelete ? '⚠️ לחץ שוב למחיקה' : '🗑️ מחק'}
-                </button>
+                {onEdit && (
+                  <button onClick={onEdit}
+                    className="flex-1 py-2 rounded-xl bg-amber-100 text-amber-800 font-semibold hover:bg-amber-200 text-sm">
+                    ✏️ ערוך
+                  </button>
+                )}
+                {isCreator && (
+                  <button onClick={handleDelete}
+                    className={`flex-1 py-2 rounded-xl font-semibold text-sm transition-colors ${
+                      confirmDelete ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-red-100 text-red-700 hover:bg-red-200'
+                    }`}>
+                    {confirmDelete ? '⚠️ לחץ שוב למחיקה' : '🗑️ מחק'}
+                  </button>
+                )}
               </div>
             )}
           </div>

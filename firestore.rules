@@ -73,16 +73,14 @@ service cloud.firestore {
       allow read: if true;
       // isSignedIn() covers admin whose Firestore doc may not exist yet
       allow create: if isSignedIn();
+      // Any registered parent can edit any activity field (including admin-created)
       allow update: if isAdmin()
-        || (isRegisteredParent() && myUid() == resource.data.createdByParentId)
+        || isRegisteredParent()
         || (isRegisteredChild()
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['childCount'])
             && request.resource.data.childCount >= 0
             && (request.resource.data.childCount == resource.data.get('childCount', 0) + 1
-                || request.resource.data.childCount == resource.data.get('childCount', 0) - 1))
-        || (isRegisteredParent()
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seatCount'])
-            && request.resource.data.seatCount >= 0);
+                || request.resource.data.childCount == resource.data.get('childCount', 0) - 1));
       // isSignedIn() covers admin whose Firestore doc may not exist yet
       allow delete: if isSignedIn() && (
         isAdmin() ||
